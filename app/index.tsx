@@ -15,6 +15,34 @@ import {
 import axios from "axios";
 import { Buffer } from "buffer";
 import * as ImagePicker from "expo-image-picker";
+import { ImagePickerAsset } from "expo-image-picker";
+
+const ProgressBar = ({ progress }: { progress: number }) => {
+	return (
+		<View
+			style={{
+				width: "100%",
+				backgroundColor: "#e0e0e0",
+				borderRadius: 5,
+				overflow: "hidden",
+				alignItems: "center",
+				justifyContent: "center",
+				marginTop: 10,
+			}}
+		>
+			<View
+				style={[
+					{
+						height: 10,
+						backgroundColor: "#3b5998",
+					},
+					{ width: `${progress}%` },
+				]}
+			/>
+			<Text>{Math.round(progress)}%</Text>
+		</View>
+	);
+};
 
 interface ImageInterface {
 	imageName: string;
@@ -31,6 +59,11 @@ export default function HomeScreen() {
 	const [data, setData] = useState<CategoryImage[]>([]);
 	const [newCategoryName, setNewCategoryName] = useState("");
 	const [loading, setLoading] = useState(false);
+	const [uploadProgress, setUploadProgress] = useState<number>(0);
+	const [totalImages, setTotalImages] = useState<number>(0);
+	const [uploadedImages, setUploadedImages] = useState<number>(0);
+
+	const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
 	const [showSelectCategoryModal, setShowSelectCategoryModal] =
 		useState(false);
 
@@ -49,19 +82,19 @@ export default function HomeScreen() {
 
 		const result = await ImagePicker.launchImageLibraryAsync({
 			mediaTypes: ImagePicker.MediaTypeOptions.Images,
-			allowsEditing: true,
+			allowsMultipleSelection: true,
 			aspect: [4, 3],
 			quality: 1,
 		});
 
 		if (!result.canceled) {
-			handleUploadImage(result.assets[0].uri, selectedCategory);
+			handleUploadImages(result.assets, selectedCategory);
 		}
 	};
 
 	// Загрузка изображения
-	const handleUploadImage = async (
-		imageUri: string,
+	const handleUploadImages = async (
+		images: ImagePickerAsset[],
 		selectedCategory: string
 	) => {
 		setLoading(true);
@@ -70,40 +103,56 @@ export default function HomeScreen() {
 		const categoryPath = `public/category/${selectedCategory}`;
 		const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
 
-		try {
-			const response = await fetch(imageUri);
-			const blob = await response.blob();
-			const reader = new FileReader();
+		setTotalImages(images.length);
+		setUploadedImages(0);
 
-			reader.onloadend = async () => {
-				const base64data = reader.result?.toString().split(",")[1];
-				const uploadResponse = await axios.put(
-					`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/${Date.now()}.jpg`,
-					{
-						message: `Добавление нового изображения в категорию ${selectedCategory}`,
-						content: base64data,
-					},
-					{
-						headers: {
-							Authorization: `token ${token}`,
+		for (let image of images) {
+			try {
+				const response = await fetch(image.uri);
+				const blob = await response.blob();
+				const reader = new FileReader();
+
+				reader.onloadend = async () => {
+					const base64data = reader.result?.toString().split(",")[1];
+					const uploadResponse = await axios.put(
+						`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/${Date.now()}.jpg`,
+						{
+							message: `Добавление нового изображения в категорию ${selectedCategory}`,
+							content: base64data,
 						},
+						{
+							headers: {
+								Authorization: `token ${token}`,
+							},
+						}
+					);
+
+					if (uploadResponse.status === 201) {
+						setUploadedImages((prev) => prev + 1);
+						setUploadProgress(
+							((uploadedImages + 1) / totalImages) * 100
+						);
+						fetchCategories(); // Обновляем список категорий
+					} else {
+						Alert.alert(
+							"Ошибка",
+							"Не удалось загрузить изображение"
+						);
 					}
-				);
+				};
 
-				if (uploadResponse.status === 201) {
-					Alert.alert("Успех", "Изображение успешно загружено");
-					fetchCategories(); // Обновляем список категорий
-				} else {
-					Alert.alert("Ошибка", "Не удалось загрузить изображение");
+				reader.readAsDataURL(blob);
+			} catch (error) {
+				Alert.alert("Ошибка", "Ошибка при добавлении изображения");
+				console.error(error);
+			} finally {
+				if (uploadedImages === totalImages) {
+					setUploadProgress(0);
+					setUploadedImages(0);
+					setTotalImages(0);
+					setLoading(false);
 				}
-			};
-
-			reader.readAsDataURL(blob);
-		} catch (error) {
-			Alert.alert("Ошибка", "Ошибка при добавлении изображения");
-			console.error(error);
-		} finally {
-			setLoading(false);
+			}
 		}
 	};
 
@@ -189,7 +238,10 @@ export default function HomeScreen() {
 
 	// Добавление новой категории
 	const addCategory = async () => {
-		if (!newCategoryName) return;
+		if (!newCategoryName) {
+			Alert.alert("Ошибка", "Нельзя давать пустое название категории");
+			return;
+		}
 
 		setLoading(true);
 		const username = "IvanOrlovsky";
@@ -254,11 +306,60 @@ export default function HomeScreen() {
 									},
 								}
 							);
-							Alert.alert(
-								"Успех",
-								`Изображение ${imageName} удалено`
-							);
-							fetchCategories(); // Обновляем список категорий
+
+							setLoading(true);
+
+							// Проверяем состояние репозитория
+							let attempts = 0;
+							const maxAttempts = 10;
+							let deleted = false;
+
+							while (attempts < maxAttempts && !deleted) {
+								try {
+									// Попробуем получить изображение, чтобы проверить, удалено ли оно
+									await axios.get(
+										`https://api.github.com/repos/${username}/${reponame}/contents/public/category/${categoryName}/${imageName}`,
+										{
+											headers: {
+												Authorization: `token ${token}`,
+											},
+										}
+									);
+								} catch (err) {
+									if (axios.isAxiosError(err)) {
+										if (err.response?.status === 404) {
+											// Если изображение не найдено, значит оно удалено
+											deleted = true;
+										}
+									} else {
+										console.error(
+											"Неизвестная ошибка:",
+											err
+										);
+									}
+								}
+
+								if (!deleted) {
+									attempts++;
+									await new Promise((resolve) =>
+										setTimeout(resolve, 500)
+									);
+								}
+							}
+
+							if (deleted) {
+								setLoading(false);
+								Alert.alert(
+									"Успех",
+									`Изображение ${imageName} удалено`
+								);
+								await fetchCategories(); // Обновляем список категорий после удаления
+							} else {
+								Alert.alert(
+									"Ошибка",
+									"Не удалось проверить удаление изображения"
+								);
+							}
 						} catch (error) {
 							Alert.alert(
 								"Ошибка",
@@ -308,33 +409,70 @@ export default function HomeScreen() {
 	};
 
 	return (
-		<View style={{ padding: 20 }}>
-			<Text
-				style={{ fontSize: 24, fontWeight: "bold", marginBottom: 10 }}
-			>
-				Галерея категорий
-			</Text>
-			{loading ? (
-				<ActivityIndicator size="large" color="#0000ff" />
-			) : (
-				<FlatList
-					data={data}
-					renderItem={({ item }) => renderCategoryImages(item)}
-					keyExtractor={(item) => item.categoryName}
-				/>
-			)}
+		<View style={{ flex: 1, gap: 8, padding: 20, marginVertical: 40 }}>
+			<View style={{ flex: 1 }}>
+				<Text
+					style={{
+						fontSize: 24,
+						fontWeight: "bold",
+						marginBottom: 10,
+					}}
+				>
+					Галерея категорий
+				</Text>
+				{loading ? (
+					<View
+						style={{
+							flex: 1,
+							justifyContent: "center",
+							alignItems: "center",
+						}}
+					>
+						<ActivityIndicator size="large" color="#0000ff" />
+						{totalImages > 0 && (
+							<View>
+								<Text>
+									Загрузка {uploadedImages} из {totalImages}{" "}
+									изображений
+								</Text>
+								<ProgressBar progress={uploadProgress / 100} />
+							</View>
+						)}
+					</View>
+				) : (
+					<FlatList
+						data={data}
+						renderItem={({ item }) => renderCategoryImages(item)}
+						keyExtractor={(item) => item.categoryName}
+					/>
+				)}
+			</View>
 
 			<Button
-				title="Добавить категорию"
+				title="Добавить изображения"
 				onPress={() => setShowSelectCategoryModal(true)}
 			/>
 
+			<Button
+				title="Добавить категорию"
+				onPress={() => setShowAddCategoryModal(true)}
+			/>
+
+			{/* Модальное окно добавления категории */}
 			<Modal
-				visible={showSelectCategoryModal}
+				visible={showAddCategoryModal}
 				animationType="slide"
-				onRequestClose={() => setShowSelectCategoryModal(false)}
+				onRequestClose={() => setShowAddCategoryModal(false)}
 			>
-				<View style={{ padding: 20 }}>
+				<View
+					style={{
+						padding: 20,
+						flex: 1,
+						justifyContent: "center",
+						alignItems: "center",
+						gap: 8,
+					}}
+				>
 					<Text style={{ fontSize: 18 }}>
 						Введите название категории:
 					</Text>
@@ -345,13 +483,101 @@ export default function HomeScreen() {
 							borderWidth: 1,
 							marginVertical: 10,
 							padding: 5,
+							alignSelf: "stretch",
 						}}
 					/>
-					<Button title="Создать" onPress={addCategory} />
-					<Button
-						title="Закрыть"
-						onPress={() => setShowSelectCategoryModal(false)}
-					/>
+					<TouchableOpacity
+						style={{
+							alignSelf: "stretch",
+							borderWidth: 1,
+							padding: 10,
+							backgroundColor: "#4169E1",
+						}}
+						onPress={addCategory}
+					>
+						<Text style={{ color: "white", textAlign: "center" }}>
+							Создать
+						</Text>
+					</TouchableOpacity>
+					<TouchableOpacity
+						style={{
+							borderWidth: 1,
+							padding: 10,
+							backgroundColor: "#4169E1",
+							alignSelf: "stretch",
+						}}
+						onPress={() => setShowAddCategoryModal(false)}
+					>
+						<Text style={{ color: "white", textAlign: "center" }}>
+							Закрыть
+						</Text>
+					</TouchableOpacity>
+				</View>
+			</Modal>
+
+			{/* Модальное окно для выбора категории куда загрузить изображение */}
+			<Modal
+				visible={showSelectCategoryModal}
+				transparent
+				animationType="slide"
+			>
+				<View
+					style={{
+						flex: 1,
+						justifyContent: "center",
+						alignItems: "center",
+						backgroundColor: "rgba(0,0,0,0.5)",
+					}}
+				>
+					<View
+						style={{
+							width: 300,
+							backgroundColor: "white",
+							borderRadius: 10,
+							padding: 20,
+						}}
+					>
+						<Text>
+							Выберите в какую категорию загрузить изображение:
+						</Text>
+						<FlatList
+							style={{ marginVertical: 8 }}
+							data={data.map((category) => category.categoryName)}
+							keyExtractor={(item) => item}
+							renderItem={({ item }) => (
+								<TouchableOpacity
+									onPress={() => {
+										pickImageFromGallery(item);
+										setShowSelectCategoryModal(false);
+									}}
+								>
+									<Text
+										style={{
+											padding: 10,
+											fontWeight: "bold",
+										}}
+									>
+										{item}
+									</Text>
+								</TouchableOpacity>
+							)}
+						/>
+
+						<TouchableOpacity
+							style={{
+								borderWidth: 1,
+								padding: 10,
+								backgroundColor: "#4169E1",
+							}}
+							onPress={() => setShowSelectCategoryModal(false)}
+						>
+							<Text
+								style={{ color: "white", textAlign: "center" }}
+							>
+								Отмена
+							</Text>
+						</TouchableOpacity>
+					</View>
 				</View>
 			</Modal>
 		</View>
