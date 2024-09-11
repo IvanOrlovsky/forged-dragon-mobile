@@ -10,9 +10,6 @@ npm-debug.*
 *.orig.*
 web-build/
 
-# ignores all .env files
-.env*
-
 # macOS
 .DS_Store
 
