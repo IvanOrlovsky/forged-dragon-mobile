@@ -16,52 +16,6 @@ import axios from "axios";
 import { Buffer } from "buffer";
 import * as ImagePicker from "expo-image-picker";
 
-const CategoryPicker = ({ categories, onSelect, visible, onClose }) => {
-	return (
-		<Modal
-			visible={visible}
-			transparent={true}
-			animationType="slide"
-			onRequestClose={onClose}
-		>
-			<View
-				style={{
-					flex: 1,
-					justifyContent: "center",
-					alignItems: "center",
-					backgroundColor: "rgba(0,0,0,0.5)",
-				}}
-			>
-				<View
-					style={{
-						width: 300,
-						backgroundColor: "white",
-						borderRadius: 10,
-						padding: 20,
-					}}
-				>
-					<Text>Select a category:</Text>
-					<FlatList
-						data={categories}
-						keyExtractor={(item) => item}
-						renderItem={({ item }) => (
-							<TouchableOpacity
-								onPress={() => {
-									onSelect(item);
-									onClose();
-								}}
-							>
-								<Text style={{ padding: 10 }}>{item}</Text>
-							</TouchableOpacity>
-						)}
-					/>
-					<Button title="Cancel" onPress={onClose} />
-				</View>
-			</View>
-		</Modal>
-	);
-};
-
 interface ImageInterface {
 	imageName: string;
 	imageUrl: string;
@@ -109,11 +63,10 @@ interface ImageType {
 export default function HomeScreen() {
 	const [data, setData] = useState<CategoryImage[]>([]);
 	const [newCategoryName, setNewCategoryName] = useState("");
-	const [newImageUrl, setNewImageUrl] = useState("");
-	const [selectedCategory, setSelectedCategory] = useState<string | null>(
-		null
-	);
+
 	const [showDeleteModal, setShowDeleteModal] = useState(false);
+	const [showSelectCategoryModal, setShowSelectCategoryModal] =
+		useState(false);
 	const [imageToDelete, setImageToDelete] = useState<{
 		categoryName: string;
 		imageName: string;
@@ -130,7 +83,7 @@ export default function HomeScreen() {
 		fetchCategories();
 	}, []);
 
-	const pickImageFromGallery = async () => {
+	const pickImageFromGallery = async (selectedCategory: string) => {
 		// Запрашиваем разрешение на доступ к медиафайлам
 		const { status } =
 			await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -149,17 +102,15 @@ export default function HomeScreen() {
 
 		if (!result.canceled) {
 			// Если изображение выбрано, его можно загрузить в выбранную категорию
-			handleUploadImage(result.uri);
+			handleUploadImage(result.assets[0].uri, selectedCategory);
 		}
 	};
 
-	const handleUploadImage = (imageUri) => {
-		if (!selectedCategory) {
-			alert("Пожалуйста, выберите категорию перед загрузкой");
-			return;
-		}
-
-		// Здесь добавь логику для загрузки изображения в выбранную категорию
+	const handleUploadImage = async (
+		imageUri: string,
+		selectedCategory: string
+	) => {
+		setShowSelectCategoryModal(false);
 		console.log(
 			"Загружается изображение:",
 			imageUri,
@@ -167,7 +118,49 @@ export default function HomeScreen() {
 			selectedCategory
 		);
 
-		// Логика загрузки на сервер или в хранилище
+		try {
+			setLoading(true); // Начинаем загрузку
+			const username = "IvanOrlovsky";
+			const reponame = "forged-dragon";
+			const categoryPath = `public/category/${selectedCategory}`;
+			const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
+
+			// Читаем файл изображения как base64
+			const response = await fetch(imageUri);
+			const blob = await response.blob();
+			const reader = new FileReader();
+
+			reader.onloadend = async () => {
+				const base64data = reader.result?.toString().split(",")[1]; // Извлекаем base64
+
+				// Запрос на загрузку файла в GitHub репозиторий
+				const uploadResponse = await axios.put(
+					`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/${Date.now()}.jpg`, // Сохраняем файл с уникальным именем
+					{
+						message: `Добавление нового изображения в категорию ${selectedCategory}`,
+						content: base64data, // Данные изображения в формате base64
+					},
+					{
+						headers: {
+							Authorization: `token ${token}`,
+						},
+					}
+				);
+
+				if (uploadResponse.status === 201) {
+					Alert.alert("Успех", "Изображение успешно загружено");
+				} else {
+					Alert.alert("Ошибка", "Не удалось загрузить изображение");
+				}
+			};
+
+			reader.readAsDataURL(blob); // Преобразуем изображение в base64 формат
+		} catch (error) {
+			Alert.alert("Ошибка", "Ошибка при добавлении изображения");
+			console.error("Ошибка при добавлении изображения:", error);
+		} finally {
+			setLoading(false); // Заканчиваем загрузку
+		}
 	};
 
 	const fetchCategories = async () => {
@@ -334,7 +327,6 @@ export default function HomeScreen() {
 								})
 							);
 
-							setSelectedCategory(null);
 							fetchCategories();
 						} catch (error) {
 							Alert.alert(
@@ -354,26 +346,7 @@ export default function HomeScreen() {
 		);
 	};
 
-	const addImageToCategory = async () => {
-		if (!selectedCategory || !newImageUrl) return;
-
-		try {
-			setLoading(true); // Начинаем загрузку
-			const username = "IvanOrlovsky";
-			const reponame = "forged-dragon";
-			const categoryPath = `public/category/${selectedCategory}`;
-			const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
-
-			setShowUploadModal(true);
-		} catch (error) {
-			Alert.alert("Ошибка", "Ошибка при добавлении изображения");
-			console.error("Ошибка при добавлении изображения:", error);
-		} finally {
-			setLoading(false); // Заканчиваем загрузку
-		}
-	};
-
-	const handleConfirmUpload = async () => {
+	const handleConfirmUpload = async (selectedCategory: string) => {
 		if (!imageToUpload) return;
 
 		try {
@@ -400,8 +373,7 @@ export default function HomeScreen() {
 				"Успех",
 				`Изображение ${imageToUpload.imageName} загружено`
 			);
-			setNewImageUrl("");
-			setSelectedCategory(null);
+
 			fetchCategories();
 		} catch (error) {
 			Alert.alert("Ошибка", "Ошибка при загрузке изображения");
@@ -520,40 +492,55 @@ export default function HomeScreen() {
 				}}
 			/>
 			<Button title="Добавить категорию" onPress={addCategory} />
-			<TextInput
-				placeholder="Введите URL изображения"
-				value={newImageUrl}
-				onChangeText={setNewImageUrl}
-				style={{
-					height: 40,
-					borderColor: "gray",
-					borderWidth: 1,
-					marginBottom: 10,
-					paddingHorizontal: 10,
-				}}
-			/>
-			<Button
-				title="Добавить изображение в категорию"
-				onPress={addImageToCategory}
-			/>
 			<Button
 				title="Выбрать изображение из галереи"
-				onPress={pickImageFromGallery}
+				onPress={() => {
+					setShowSelectCategoryModal(true);
+				}}
 			/>
-			<Picker
-				selectedValue={selectedCategory}
-				onValueChange={(itemValue) => setSelectedCategory(itemValue)}
-				style={{ height: 50, width: 200 }}
+			{/* Модальное окно для выбора категории куда загрузить изображение*/}
+			<Modal
+				visible={showSelectCategoryModal}
+				transparent
+				animationType="slide"
 			>
-				{data.map((category) => (
-					<Picker.Item
-						key={category.categoryName}
-						label={category.categoryName}
-						value={category.categoryName}
-					/>
-				))}
-			</Picker>
-
+				<View
+					style={{
+						flex: 1,
+						justifyContent: "center",
+						alignItems: "center",
+						backgroundColor: "rgba(0,0,0,0.5)",
+					}}
+				>
+					<View
+						style={{
+							width: 300,
+							backgroundColor: "white",
+							borderRadius: 10,
+							padding: 20,
+						}}
+					>
+						<Text>Select a category:</Text>
+						<FlatList
+							data={data.map((category) => category.categoryName)}
+							keyExtractor={(item) => item}
+							renderItem={({ item }) => (
+								<TouchableOpacity
+									onPress={() => {
+										pickImageFromGallery(item);
+									}}
+								>
+									<Text style={{ padding: 10 }}>{item}</Text>
+								</TouchableOpacity>
+							)}
+						/>
+						<Button
+							title="Cancel"
+							onPress={() => setShowSelectCategoryModal(false)}
+						/>
+					</View>
+				</View>
+			</Modal>
 			{/* Модальное окно для подтверждения удаления изображения */}
 			<Modal visible={showDeleteModal} transparent animationType="slide">
 				<View
@@ -575,11 +562,7 @@ export default function HomeScreen() {
 						<Text>
 							Вы уверены, что хотите удалить это изображение?
 						</Text>
-						<Button
-							title="Удалить"
-							onPress={handleConfirmUpload}
-							color="red"
-						/>
+						<Button title="Удалить" color="red" />
 						<Button
 							title="Отмена"
 							onPress={() => setShowDeleteModal(false)}
@@ -606,10 +589,7 @@ export default function HomeScreen() {
 						}}
 					>
 						<Text>Вы хотите загрузить это изображение?</Text>
-						<Button
-							title="Загрузить"
-							onPress={handleConfirmUpload}
-						/>
+						<Button title="Загрузить" />
 						<Button
 							title="Отмена"
 							onPress={() => setShowUploadModal(false)}
