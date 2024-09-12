@@ -201,6 +201,7 @@ export default function HomeScreen() {
 		} catch (error) {
 			Alert.alert("Ошибка", "Ошибка при добавлении изображения");
 			console.error(error);
+			setUploading(false);
 		}
 	};
 
@@ -215,6 +216,9 @@ export default function HomeScreen() {
 		const reponame = "forged-dragon";
 		const categoryPath = `public/category/${newCategoryName}`;
 		const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
+
+		// Закрыть модальное окно после ввода категории
+		setShowAddCategoryModal(false);
 
 		try {
 			await axios.put(
@@ -232,7 +236,9 @@ export default function HomeScreen() {
 
 			Alert.alert("Успех", `Категория ${newCategoryName} добавлена`);
 			setNewCategoryName("");
-			fetchCategories(); // Обновляем список категорий
+
+			// Обновляем список категорий после добавления
+			await fetchCategories();
 		} catch (error) {
 			Alert.alert("Ошибка", "Ошибка при добавлении категории");
 			console.error(error);
@@ -307,12 +313,99 @@ export default function HomeScreen() {
 		);
 	};
 
+	const deleteCategory = async (categoryName: string) => {
+		Alert.alert(
+			"Подтверждение",
+			`Вы уверены, что хотите удалить категорию ${categoryName} и все её изображения?`,
+			[
+				{ text: "Отмена", style: "cancel" },
+				{
+					text: "Удалить",
+					onPress: async () => {
+						setDeleting(true);
+						const username = "IvanOrlovsky";
+						const reponame = "forged-dragon";
+						const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
+
+						try {
+							const categoryPath = `public/category/${categoryName}`;
+							const response = await axios.get(
+								`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}`,
+								{
+									headers: {
+										Authorization: `token ${token}`,
+									},
+								}
+							);
+
+							// Удаляем все изображения категории
+							for (let image of response.data) {
+								await axios.delete(
+									`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/${image.name}`,
+									{
+										data: {
+											message: `Delete image ${image.name} in category ${categoryName}`,
+											sha: image.sha,
+										},
+										headers: {
+											Authorization: `token ${token}`,
+										},
+									}
+								);
+							}
+
+							// Удаляем саму категорию
+							const gitkeepItem = response.data.find(
+								(item: any) => item.name === ".gitkeep"
+							);
+							if (gitkeepItem) {
+								await axios.delete(
+									`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/.gitkeep`,
+									{
+										data: {
+											message: `Delete category ${categoryName}`,
+											sha: gitkeepItem.sha,
+										},
+										headers: {
+											Authorization: `token ${token}`,
+										},
+									}
+								);
+							}
+
+							Alert.alert(
+								"Успех",
+								`Категория ${categoryName} и все её изображения удалены`
+							);
+
+							// Обновляем список категорий после удаления
+							await fetchCategories();
+						} catch (error) {
+							Alert.alert(
+								"Ошибка",
+								"Ошибка при удалении категории"
+							);
+							console.error(error);
+						} finally {
+							setDeleting(false);
+						}
+					},
+				},
+			]
+		);
+	};
+
 	const renderCategoryImages = (category: CategoryImage) => {
 		return (
 			<View key={category.categoryName} style={{ marginBottom: 20 }}>
 				<Text style={{ fontSize: 18, fontWeight: "bold" }}>
 					{category.categoryName}
 				</Text>
+				<Button
+					title="Удалить категорию"
+					color="red"
+					onPress={() => deleteCategory(category.categoryName)}
+				/>
 				<ScrollView horizontal>
 					{category.images.map((image) => (
 						<View key={image.imageName} style={{ marginRight: 10 }}>
@@ -378,7 +471,7 @@ export default function HomeScreen() {
 						)}
 						{deleting && (
 							<View>
-								<Text>Удаление изображений...</Text>
+								<Text>Удаление категории...</Text>
 							</View>
 						)}
 					</View>
