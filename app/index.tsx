@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
 	Image,
 	Text,
@@ -11,38 +11,12 @@ import {
 	Alert,
 	FlatList,
 	TouchableOpacity,
+	RefreshControl,
 } from "react-native";
 import axios from "axios";
 import { Buffer } from "buffer";
 import * as ImagePicker from "expo-image-picker";
 import { ImagePickerAsset } from "expo-image-picker";
-
-const ProgressBar = ({ progress }: { progress: number }) => {
-	return (
-		<View
-			style={{
-				width: "100%",
-				backgroundColor: "#e0e0e0",
-				borderRadius: 5,
-				overflow: "hidden",
-				alignItems: "center",
-				justifyContent: "center",
-				marginTop: 10,
-			}}
-		>
-			<View
-				style={[
-					{
-						height: 10,
-						backgroundColor: "#3b5998",
-					},
-					{ width: `${progress}%` },
-				]}
-			/>
-			<Text>{Math.round(progress)}%</Text>
-		</View>
-	);
-};
 
 interface ImageInterface {
 	imageName: string;
@@ -55,13 +29,12 @@ interface CategoryImage {
 }
 
 export default function HomeScreen() {
-	// Данные о категориях и фотографиях в них
 	const [data, setData] = useState<CategoryImage[]>([]);
 	const [newCategoryName, setNewCategoryName] = useState("");
 	const [loading, setLoading] = useState(false);
-	const [uploadProgress, setUploadProgress] = useState<number>(0);
-	const [totalImages, setTotalImages] = useState<number>(0);
-	const [uploadedImages, setUploadedImages] = useState<number>(0);
+	const [deleting, setDeleting] = useState(false);
+	const [uploading, setUploading] = useState(false);
+	const [refreshing, setRefreshing] = useState(false);
 
 	const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
 	const [showSelectCategoryModal, setShowSelectCategoryModal] =
@@ -71,93 +44,7 @@ export default function HomeScreen() {
 		fetchCategories();
 	}, []);
 
-	// Запрос разрешения и выбор изображения
-	const pickImageFromGallery = async (selectedCategory: string) => {
-		const { status } =
-			await ImagePicker.requestMediaLibraryPermissionsAsync();
-		if (status !== "granted") {
-			alert("Необходимо разрешение на доступ к галерее!");
-			return;
-		}
-
-		const result = await ImagePicker.launchImageLibraryAsync({
-			mediaTypes: ImagePicker.MediaTypeOptions.Images,
-			allowsMultipleSelection: true,
-			aspect: [4, 3],
-			quality: 1,
-		});
-
-		if (!result.canceled) {
-			handleUploadImages(result.assets, selectedCategory);
-		}
-	};
-
-	// Загрузка изображения
-	const handleUploadImages = async (
-		images: ImagePickerAsset[],
-		selectedCategory: string
-	) => {
-		setLoading(true);
-		const username = "IvanOrlovsky";
-		const reponame = "forged-dragon";
-		const categoryPath = `public/category/${selectedCategory}`;
-		const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
-
-		setTotalImages(images.length);
-		setUploadedImages(0);
-
-		for (let image of images) {
-			try {
-				const response = await fetch(image.uri);
-				const blob = await response.blob();
-				const reader = new FileReader();
-
-				reader.onloadend = async () => {
-					const base64data = reader.result?.toString().split(",")[1];
-					const uploadResponse = await axios.put(
-						`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/${Date.now()}.jpg`,
-						{
-							message: `Добавление нового изображения в категорию ${selectedCategory}`,
-							content: base64data,
-						},
-						{
-							headers: {
-								Authorization: `token ${token}`,
-							},
-						}
-					);
-
-					if (uploadResponse.status === 201) {
-						setUploadedImages((prev) => prev + 1);
-						setUploadProgress(
-							((uploadedImages + 1) / totalImages) * 100
-						);
-						fetchCategories(); // Обновляем список категорий
-					} else {
-						Alert.alert(
-							"Ошибка",
-							"Не удалось загрузить изображение"
-						);
-					}
-				};
-
-				reader.readAsDataURL(blob);
-			} catch (error) {
-				Alert.alert("Ошибка", "Ошибка при добавлении изображения");
-				console.error(error);
-			} finally {
-				if (uploadedImages === totalImages) {
-					setUploadProgress(0);
-					setUploadedImages(0);
-					setTotalImages(0);
-					setLoading(false);
-				}
-			}
-		}
-	};
-
-	// Получение категорий
-	const fetchCategories = async () => {
+	const fetchCategories = useCallback(async () => {
 		setLoading(true);
 		const username = "IvanOrlovsky";
 		const reponame = "forged-dragon";
@@ -187,10 +74,11 @@ export default function HomeScreen() {
 			console.error(error);
 		} finally {
 			setLoading(false);
+			setUploading(false);
+			setDeleting(false);
 		}
-	};
+	}, []);
 
-	// Получение изображений в категории
 	const fetchImages = async (
 		categoryName: string
 	): Promise<ImageInterface[]> => {
@@ -236,7 +124,86 @@ export default function HomeScreen() {
 		}
 	};
 
-	// Добавление новой категории
+	const pickImageFromGallery = async (selectedCategory: string) => {
+		const { status } =
+			await ImagePicker.requestMediaLibraryPermissionsAsync();
+		if (status !== "granted") {
+			alert("Необходимо разрешение на доступ к галерее!");
+			return;
+		}
+
+		const result = await ImagePicker.launchImageLibraryAsync({
+			mediaTypes: ImagePicker.MediaTypeOptions.Images,
+			allowsMultipleSelection: true,
+			aspect: [4, 3],
+			quality: 1,
+		});
+
+		if (!result.canceled) {
+			handleUploadImages(result.assets, selectedCategory);
+		}
+	};
+
+	const handleUploadImages = async (
+		images: ImagePickerAsset[],
+		selectedCategory: string
+	) => {
+		setUploading(true);
+
+		const username = "IvanOrlovsky";
+		const reponame = "forged-dragon";
+		const categoryPath = `public/category/${selectedCategory}`;
+		const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
+
+		let uploadedCount = 0;
+
+		try {
+			for (let image of images) {
+				const response = await fetch(image.uri);
+				const blob = await response.blob();
+				const reader = new FileReader();
+
+				reader.onloadend = async () => {
+					const base64data = reader.result?.toString().split(",")[1];
+					const uploadResponse = await axios.put(
+						`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/${Date.now()}.jpg`,
+						{
+							message: `Добавление нового изображения в категорию ${selectedCategory}`,
+							content: base64data,
+						},
+						{
+							headers: {
+								Authorization: `token ${token}`,
+							},
+						}
+					);
+
+					if (uploadResponse.status === 201) {
+						uploadedCount += 1;
+
+						if (uploadedCount === images.length) {
+							Alert.alert(
+								"Успех",
+								"Все изображения успешно загружены"
+							);
+							setUploading(false);
+							fetchCategories(); // Обновляем список категорий сразу после загрузки
+						}
+					} else {
+						Alert.alert(
+							"Ошибка",
+							"Не удалось загрузить изображение"
+						);
+					}
+				};
+				reader.readAsDataURL(blob);
+			}
+		} catch (error) {
+			Alert.alert("Ошибка", "Ошибка при добавлении изображения");
+			console.error(error);
+		}
+	};
+
 	const addCategory = async () => {
 		if (!newCategoryName) {
 			Alert.alert("Ошибка", "Нельзя давать пустое название категории");
@@ -274,7 +241,6 @@ export default function HomeScreen() {
 		}
 	};
 
-	// Удаление изображения
 	const deleteImage = async (
 		categoryName: string,
 		imageName: string,
@@ -307,59 +273,25 @@ export default function HomeScreen() {
 								}
 							);
 
-							setLoading(true);
-
-							// Проверяем состояние репозитория
-							let attempts = 0;
-							const maxAttempts = 10;
-							let deleted = false;
-
-							while (attempts < maxAttempts && !deleted) {
-								try {
-									// Попробуем получить изображение, чтобы проверить, удалено ли оно
-									await axios.get(
-										`https://api.github.com/repos/${username}/${reponame}/contents/public/category/${categoryName}/${imageName}`,
-										{
-											headers: {
-												Authorization: `token ${token}`,
-											},
-										}
-									);
-								} catch (err) {
-									if (axios.isAxiosError(err)) {
-										if (err.response?.status === 404) {
-											// Если изображение не найдено, значит оно удалено
-											deleted = true;
-										}
-									} else {
-										console.error(
-											"Неизвестная ошибка:",
-											err
-										);
-									}
+							const updatedData = data.map((category) => {
+								if (category.categoryName === categoryName) {
+									return {
+										...category,
+										images: category.images.filter(
+											(image) =>
+												image.imageName !== imageName
+										),
+									};
 								}
+								return category;
+							});
 
-								if (!deleted) {
-									attempts++;
-									await new Promise((resolve) =>
-										setTimeout(resolve, 500)
-									);
-								}
-							}
+							setData(updatedData);
 
-							if (deleted) {
-								setLoading(false);
-								Alert.alert(
-									"Успех",
-									`Изображение ${imageName} удалено`
-								);
-								await fetchCategories(); // Обновляем список категорий после удаления
-							} else {
-								Alert.alert(
-									"Ошибка",
-									"Не удалось проверить удаление изображения"
-								);
-							}
+							Alert.alert(
+								"Успех",
+								`Изображение ${imageName} удалено`
+							);
 						} catch (error) {
 							Alert.alert(
 								"Ошибка",
@@ -375,7 +307,6 @@ export default function HomeScreen() {
 		);
 	};
 
-	// Рендер изображений
 	const renderCategoryImages = (category: CategoryImage) => {
 		return (
 			<View key={category.categoryName} style={{ marginBottom: 20 }}>
@@ -408,6 +339,12 @@ export default function HomeScreen() {
 		);
 	};
 
+	const onRefresh = useCallback(async () => {
+		setRefreshing(true);
+		await fetchCategories();
+		setRefreshing(false);
+	}, [fetchCategories]);
+
 	return (
 		<View style={{ flex: 1, gap: 8, padding: 20, marginVertical: 40 }}>
 			<View style={{ flex: 1 }}>
@@ -420,7 +357,7 @@ export default function HomeScreen() {
 				>
 					Галерея категорий
 				</Text>
-				{loading ? (
+				{loading || deleting || uploading ? (
 					<View
 						style={{
 							flex: 1,
@@ -429,13 +366,19 @@ export default function HomeScreen() {
 						}}
 					>
 						<ActivityIndicator size="large" color="#0000ff" />
-						{totalImages > 0 && (
+						{loading && (
 							<View>
-								<Text>
-									Загрузка {uploadedImages} из {totalImages}{" "}
-									изображений
-								</Text>
-								<ProgressBar progress={uploadProgress / 100} />
+								<Text>Загрузка данных сайта...</Text>
+							</View>
+						)}
+						{uploading && (
+							<View>
+								<Text>Загрузка изображений...</Text>
+							</View>
+						)}
+						{deleting && (
+							<View>
+								<Text>Удаление изображений...</Text>
 							</View>
 						)}
 					</View>
@@ -444,6 +387,12 @@ export default function HomeScreen() {
 						data={data}
 						renderItem={({ item }) => renderCategoryImages(item)}
 						keyExtractor={(item) => item.categoryName}
+						refreshControl={
+							<RefreshControl
+								refreshing={refreshing}
+								onRefresh={onRefresh}
+							/>
+						}
 					/>
 				)}
 			</View>
