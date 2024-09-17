@@ -163,17 +163,21 @@ export default function HomeScreen() {
 		const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
 		let uploadedCount = 0;
 
-		try {
-			for (let image of images) {
-				const response = await fetch(image.uri);
-				const blob = await response.blob();
-				const reader = new FileReader();
+		const uploadImage = async (image: ImagePickerAsset) => {
+			const response = await fetch(image.uri);
+			const blob = await response.blob();
+			const reader = new FileReader();
 
+			return new Promise<void>((resolve, reject) => {
 				reader.onloadend = async () => {
 					const base64data = reader.result?.toString().split(",")[1];
+					const fileName = `${Date.now()}_${Math.random()
+						.toString(36)
+						.substring(7)}.jpg`;
+
 					try {
 						const uploadResponse = await axios.put(
-							`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/${Date.now()}.jpg`,
+							`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/${fileName}`,
 							{
 								message: `Добавление нового изображения в категорию ${selectedCategory}`,
 								content: base64data,
@@ -190,15 +194,7 @@ export default function HomeScreen() {
 
 						if (uploadResponse.status === 201) {
 							uploadedCount += 1;
-
-							if (uploadedCount === images.length) {
-								Alert.alert(
-									"Успех",
-									"Все изображения успешно загружены"
-								);
-								setUploading(false);
-								fetchCategories(); // Обновляем список категорий сразу после загрузки
-							}
+							resolve();
 						} else {
 							throw new Error(
 								"Unexpected response status: " +
@@ -206,22 +202,29 @@ export default function HomeScreen() {
 							);
 						}
 					} catch (uploadError) {
-						Alert.alert(
-							"Ошибка",
-							"Не удалось загрузить изображение"
-						);
 						console.error(
 							`Error uploading image: ${image.uri}`,
 							uploadError
 						);
-						setUploading(false);
+						reject(uploadError);
 					}
 				};
+				reader.onerror = (error) => reject(error);
 				reader.readAsDataURL(blob);
-			}
+			});
+		};
+
+		try {
+			await Promise.all(images.map(uploadImage));
+			Alert.alert("Успех", "Все изображения успешно загружены");
+			fetchCategories(); // Обновляем список категорий сразу после загрузки
 		} catch (error) {
-			Alert.alert("Ошибка", "Ошибка при добавлении изображения");
+			Alert.alert(
+				"Ошибка",
+				"Не удалось загрузить одно или несколько изображений"
+			);
 			console.error("Error handling image upload:", error);
+		} finally {
 			setUploading(false);
 		}
 	};
@@ -260,7 +263,10 @@ export default function HomeScreen() {
 			setNewCategoryName("");
 
 			// Обновляем список категорий после добавления
-			await fetchCategories();
+			setData((prev) => [
+				{ categoryName: newCategoryName, images: [] },
+				...prev,
+			]);
 		} catch (error) {
 			Alert.alert("Ошибка", "Ошибка при добавлении категории");
 			console.error("Error adding category:", error);
@@ -369,18 +375,20 @@ export default function HomeScreen() {
 
 							// Удаляем все изображения категории
 							for (let image of response.data) {
-								await axios.delete(
-									`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/${image.name}`,
-									{
-										data: {
-											message: `Delete image ${image.name} in category ${categoryName}`,
-											sha: image.sha,
-										},
-										headers: {
-											Authorization: `token ${token}`,
-										},
-									}
-								);
+								if (image.name !== ".gitkeep") {
+									await axios.delete(
+										`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/${image.name}`,
+										{
+											data: {
+												message: `Delete image ${image.name} in category ${categoryName}`,
+												sha: image.sha,
+											},
+											headers: {
+												Authorization: `token ${token}`,
+											},
+										}
+									);
+								}
 							}
 
 							// Удаляем саму категорию
@@ -439,26 +447,33 @@ export default function HomeScreen() {
 					onPress={() => deleteCategory(category.categoryName)}
 				/>
 				<ScrollView horizontal>
-					{category.images.map((image) => (
-						<View key={image.imageName} style={{ marginRight: 10 }}>
-							<Image
-								source={{ uri: image.imageUrl }}
-								style={{ width: 100, height: 100 }}
-								resizeMode="cover"
-							/>
-							<Button
-								title="Удалить"
-								color="red"
-								onPress={() =>
-									deleteImage(
-										category.categoryName,
-										image.imageName,
-										image.sha
-									)
-								}
-							/>
-						</View>
-					))}
+					{category.images.map((image) => {
+						if (image.imageName !== ".gitkeep") {
+							return (
+								<View
+									key={image.imageName}
+									style={{ marginRight: 10 }}
+								>
+									<Image
+										source={{ uri: image.imageUrl }}
+										style={{ width: 100, height: 100 }}
+										resizeMode="cover"
+									/>
+									<Button
+										title="Удалить"
+										color="red"
+										onPress={() =>
+											deleteImage(
+												category.categoryName,
+												image.imageName,
+												image.sha
+											)
+										}
+									/>
+								</View>
+							);
+						}
+					})}
 				</ScrollView>
 			</View>
 		);
