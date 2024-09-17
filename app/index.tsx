@@ -23,6 +23,7 @@ interface ImageInterface {
 	imageUrl: string;
 	sha: string;
 }
+
 interface CategoryImage {
 	categoryName: string;
 	images: ImageInterface[];
@@ -50,6 +51,7 @@ export default function HomeScreen() {
 		const reponame = "forged-dragon";
 		const categoryPath = "public/category";
 		const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
+		console.info("Fetching categories...");
 
 		try {
 			const response = await axios.get(
@@ -60,6 +62,7 @@ export default function HomeScreen() {
 					},
 				}
 			);
+			console.info(`Fetched categories response: ${response.status}`);
 
 			const categories = await Promise.all(
 				response.data.map(async (item: any) => {
@@ -71,7 +74,7 @@ export default function HomeScreen() {
 			setData(categories);
 		} catch (error) {
 			Alert.alert("Ошибка", "Ошибка при получении категорий");
-			console.error(error);
+			console.error("Error fetching categories:", error);
 		} finally {
 			setLoading(false);
 			setUploading(false);
@@ -86,6 +89,7 @@ export default function HomeScreen() {
 		const reponame = "forged-dragon";
 		const categoryPath = `public/category/${categoryName}`;
 		const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
+		console.info(`Fetching images for category: ${categoryName}...`);
 
 		try {
 			const response = await axios.get(
@@ -96,6 +100,7 @@ export default function HomeScreen() {
 					},
 				}
 			);
+			console.info(`Fetched images response: ${response.status}`);
 
 			return await Promise.all(
 				response.data.map(async (image: any) => {
@@ -106,7 +111,6 @@ export default function HomeScreen() {
 						},
 						responseType: "arraybuffer",
 					});
-
 					const base64Image = Buffer.from(
 						imageResponse.data,
 						"binary"
@@ -119,7 +123,10 @@ export default function HomeScreen() {
 				})
 			);
 		} catch (error) {
-			console.error(error);
+			console.error(
+				`Error fetching images for category ${categoryName}:`,
+				error
+			);
 			return [];
 		}
 	};
@@ -154,7 +161,6 @@ export default function HomeScreen() {
 		const reponame = "forged-dragon";
 		const categoryPath = `public/category/${selectedCategory}`;
 		const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
-
 		let uploadedCount = 0;
 
 		try {
@@ -165,42 +171,57 @@ export default function HomeScreen() {
 
 				reader.onloadend = async () => {
 					const base64data = reader.result?.toString().split(",")[1];
-					const uploadResponse = await axios.put(
-						`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/${Date.now()}.jpg`,
-						{
-							message: `Добавление нового изображения в категорию ${selectedCategory}`,
-							content: base64data,
-						},
-						{
-							headers: {
-								Authorization: `token ${token}`,
+					try {
+						const uploadResponse = await axios.put(
+							`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/${Date.now()}.jpg`,
+							{
+								message: `Добавление нового изображения в категорию ${selectedCategory}`,
+								content: base64data,
 							},
-						}
-					);
+							{
+								headers: {
+									Authorization: `token ${token}`,
+								},
+							}
+						);
+						console.info(
+							`Image upload response: ${uploadResponse.status}`
+						);
 
-					if (uploadResponse.status === 201) {
-						uploadedCount += 1;
+						if (uploadResponse.status === 201) {
+							uploadedCount += 1;
 
-						if (uploadedCount === images.length) {
-							Alert.alert(
-								"Успех",
-								"Все изображения успешно загружены"
+							if (uploadedCount === images.length) {
+								Alert.alert(
+									"Успех",
+									"Все изображения успешно загружены"
+								);
+								setUploading(false);
+								fetchCategories(); // Обновляем список категорий сразу после загрузки
+							}
+						} else {
+							throw new Error(
+								"Unexpected response status: " +
+									uploadResponse.status
 							);
-							setUploading(false);
-							fetchCategories(); // Обновляем список категорий сразу после загрузки
 						}
-					} else {
+					} catch (uploadError) {
 						Alert.alert(
 							"Ошибка",
 							"Не удалось загрузить изображение"
 						);
+						console.error(
+							`Error uploading image: ${image.uri}`,
+							uploadError
+						);
+						setUploading(false);
 					}
 				};
 				reader.readAsDataURL(blob);
 			}
 		} catch (error) {
 			Alert.alert("Ошибка", "Ошибка при добавлении изображения");
-			console.error(error);
+			console.error("Error handling image upload:", error);
 			setUploading(false);
 		}
 	};
@@ -216,6 +237,7 @@ export default function HomeScreen() {
 		const reponame = "forged-dragon";
 		const categoryPath = `public/category/${newCategoryName}`;
 		const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
+		console.info(`Adding new category: ${newCategoryName}...`);
 
 		// Закрыть модальное окно после ввода категории
 		setShowAddCategoryModal(false);
@@ -241,7 +263,7 @@ export default function HomeScreen() {
 			await fetchCategories();
 		} catch (error) {
 			Alert.alert("Ошибка", "Ошибка при добавлении категории");
-			console.error(error);
+			console.error("Error adding category:", error);
 		} finally {
 			setLoading(false);
 		}
@@ -264,6 +286,9 @@ export default function HomeScreen() {
 						const username = "IvanOrlovsky";
 						const reponame = "forged-dragon";
 						const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
+						console.info(
+							`Deleting image: ${imageName} from category: ${categoryName}...`
+						);
 
 						try {
 							await axios.delete(
@@ -303,7 +328,10 @@ export default function HomeScreen() {
 								"Ошибка",
 								"Ошибка при удалении изображения"
 							);
-							console.error(error);
+							console.error(
+								`Error deleting image ${imageName} from category ${categoryName}:`,
+								error
+							);
 						} finally {
 							setLoading(false);
 						}
@@ -326,6 +354,7 @@ export default function HomeScreen() {
 						const username = "IvanOrlovsky";
 						const reponame = "forged-dragon";
 						const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
+						console.info(`Deleting category: ${categoryName}...`);
 
 						try {
 							const categoryPath = `public/category/${categoryName}`;
@@ -385,7 +414,10 @@ export default function HomeScreen() {
 								"Ошибка",
 								"Ошибка при удалении категории"
 							);
-							console.error(error);
+							console.error(
+								`Error deleting category ${categoryName}:`,
+								error
+							);
 						} finally {
 							setDeleting(false);
 						}
@@ -520,7 +552,7 @@ export default function HomeScreen() {
 					</Text>
 					<TextInput
 						value={newCategoryName}
-						onChangeText={setNewCategoryName}
+						onChangeText={(text) => setNewCategoryName(text.trim())}
 						style={{
 							borderWidth: 1,
 							marginVertical: 10,
