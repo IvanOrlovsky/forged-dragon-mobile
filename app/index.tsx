@@ -222,7 +222,6 @@ export default function HomeScreen() {
 				await delay(1000); // Добавляем задержку между запросами
 			}
 			Alert.alert("Успех", "Все изображения успешно загружены");
-			fetchCategories(); // Обновляем список категорий сразу после загрузки
 		} catch (error) {
 			Alert.alert(
 				"Ошибка",
@@ -231,6 +230,7 @@ export default function HomeScreen() {
 			console.error("Error handling image upload:", error);
 		} finally {
 			setUploading(false);
+			await fetchCategories(); // Обновляем список категорий сразу после загрузки
 		}
 	};
 
@@ -419,9 +419,6 @@ export default function HomeScreen() {
 								"Успех",
 								`Категория ${categoryName} и все её изображения удалены`
 							);
-
-							// Обновляем список категорий после удаления
-							await fetchCategories();
 						} catch (error) {
 							Alert.alert(
 								"Ошибка",
@@ -433,6 +430,8 @@ export default function HomeScreen() {
 							);
 						} finally {
 							setDeleting(false);
+							// Обновляем список категорий после удаления
+							await fetchCategories();
 						}
 					},
 				},
