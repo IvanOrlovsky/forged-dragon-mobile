@@ -537,55 +537,69 @@ export default function HomeScreen() {
 				visible={showAddCategoryModal}
 				animationType="slide"
 				onRequestClose={() => setShowAddCategoryModal(false)}
+				transparent
 			>
 				<View
 					style={{
-						padding: 20,
 						flex: 1,
 						justifyContent: "center",
 						alignItems: "center",
-						gap: 8,
+						backgroundColor: "rgba(0,0,0,0.5)",
 					}}
 				>
-					<Text style={{ fontSize: 18 }}>
-						Введите название категории:
-					</Text>
-					<TextInput
-						value={newCategoryName}
-						onChangeText={(text) => setNewCategoryName(text.trim())}
+					<View
 						style={{
-							borderWidth: 1,
-							marginVertical: 10,
-							padding: 5,
-							alignSelf: "stretch",
+							width: 300,
+							backgroundColor: "white",
+							borderRadius: 10,
+							padding: 20,
 						}}
-					/>
-					<TouchableOpacity
-						style={{
-							alignSelf: "stretch",
-							borderWidth: 1,
-							padding: 10,
-							backgroundColor: "#4169E1",
-						}}
-						onPress={addCategory}
 					>
-						<Text style={{ color: "white", textAlign: "center" }}>
-							Создать
-						</Text>
-					</TouchableOpacity>
-					<TouchableOpacity
-						style={{
-							borderWidth: 1,
-							padding: 10,
-							backgroundColor: "#4169E1",
-							alignSelf: "stretch",
-						}}
-						onPress={() => setShowAddCategoryModal(false)}
-					>
-						<Text style={{ color: "white", textAlign: "center" }}>
-							Закрыть
-						</Text>
-					</TouchableOpacity>
+						<Text>Введите название для новой категории:</Text>
+						<TextInput
+							value={newCategoryName}
+							onChangeText={(text) =>
+								setNewCategoryName(text.trim())
+							}
+							style={{
+								borderWidth: 1,
+								marginVertical: 10,
+								padding: 5,
+								alignSelf: "stretch",
+							}}
+						/>
+						<TouchableOpacity
+							style={{
+								alignSelf: "stretch",
+								borderWidth: 1,
+								padding: 10,
+								backgroundColor: "#4169E1",
+								marginBottom: 8,
+							}}
+							onPress={addCategory}
+						>
+							<Text
+								style={{ color: "white", textAlign: "center" }}
+							>
+								Создать
+							</Text>
+						</TouchableOpacity>
+						<TouchableOpacity
+							style={{
+								borderWidth: 1,
+								padding: 10,
+								backgroundColor: "#4169E1",
+								alignSelf: "stretch",
+							}}
+							onPress={() => setShowAddCategoryModal(false)}
+						>
+							<Text
+								style={{ color: "white", textAlign: "center" }}
+							>
+								Закрыть
+							</Text>
+						</TouchableOpacity>
+					</View>
 				</View>
 			</Modal>
 
