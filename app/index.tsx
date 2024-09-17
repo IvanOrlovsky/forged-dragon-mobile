@@ -151,6 +151,9 @@ export default function HomeScreen() {
 		}
 	};
 
+	const delay = (ms: number) =>
+		new Promise((resolve) => setTimeout(resolve, ms));
+
 	const handleUploadImages = async (
 		images: ImagePickerAsset[],
 		selectedCategory: string
@@ -168,7 +171,7 @@ export default function HomeScreen() {
 			const blob = await response.blob();
 			const reader = new FileReader();
 
-			return new Promise<void>((resolve, reject) => {
+			return new Promise<void>(async (resolve, reject) => {
 				reader.onloadend = async () => {
 					const base64data = reader.result?.toString().split(",")[1];
 					const fileName = `${Date.now()}_${Math.random()
@@ -189,7 +192,7 @@ export default function HomeScreen() {
 							}
 						);
 						console.info(
-							`Image upload response: ${uploadResponse.status}`
+							`Image upload response for ${fileName}: ${uploadResponse.status}`
 						);
 
 						if (uploadResponse.status === 201) {
@@ -197,13 +200,12 @@ export default function HomeScreen() {
 							resolve();
 						} else {
 							throw new Error(
-								"Unexpected response status: " +
-									uploadResponse.status
+								`Unexpected response status for ${fileName}: ${uploadResponse.status}`
 							);
 						}
 					} catch (uploadError) {
 						console.error(
-							`Error uploading image: ${image.uri}`,
+							`Error uploading image ${fileName}:`,
 							uploadError
 						);
 						reject(uploadError);
@@ -215,7 +217,10 @@ export default function HomeScreen() {
 		};
 
 		try {
-			await Promise.all(images.map(uploadImage));
+			for (const image of images) {
+				await uploadImage(image);
+				await delay(1000); // Добавляем задержку между запросами
+			}
 			Alert.alert("Успех", "Все изображения успешно загружены");
 			fetchCategories(); // Обновляем список категорий сразу после загрузки
 		} catch (error) {
