@@ -441,7 +441,18 @@ export default function HomeScreen() {
 
 	const renderCategoryImages = (category: CategoryImage) => {
 		return (
-			<View key={category.categoryName} style={{ marginBottom: 20 }}>
+			<View
+				key={category.categoryName}
+				style={{
+					marginBottom: 20,
+					padding: 16,
+					backgroundColor: "#C0C2C9",
+					borderRadius: 16,
+					flex: 1,
+					flexDirection: "column",
+					gap: 10,
+				}}
+			>
 				<Text style={{ fontSize: 18, fontWeight: "bold" }}>
 					{category.categoryName}
 				</Text>
