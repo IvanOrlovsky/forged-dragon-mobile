@@ -38,49 +38,78 @@ export default function HomeScreen() {
 	const [refreshing, setRefreshing] = useState(false);
 
 	const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+	const [etag, setEtag] = useState<string | null>(null);
 	const [showSelectCategoryModal, setShowSelectCategoryModal] =
 		useState(false);
 
 	useEffect(() => {
-		fetchCategories();
+		fetchCategories(true);
 	}, []);
 
-	const fetchCategories = useCallback(async () => {
-		setLoading(true);
-		const username = "IvanOrlovsky";
-		const reponame = "forged-dragon";
-		const categoryPath = "public/category";
-		const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
-		console.info("Fetching categories...");
+	const fetchCategories = useCallback(
+		async (forceRefresh = false) => {
+			setLoading(true);
+			const username = "IvanOrlovsky";
+			const reponame = "forged-dragon";
+			const categoryPath = "public/category";
+			const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
+			const delayBetweenChecks = 2000;
 
-		try {
-			const response = await axios.get(
-				`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}`,
-				{
-					headers: {
-						Authorization: `token ${token}`,
-					},
+			console.log(etag);
+			try {
+				const headers: Record<string, string> = {
+					Authorization: `token ${token}`,
+					"Cache-Control": "no-cache", // Отключаем кеширование
+					Pragma: "no-cache",
+				};
+
+				// Если нет необходимости в принудительном обновлении и есть ETag, добавляем его в запрос
+				if (!forceRefresh && etag) {
+					headers["If-None-Match"] = etag;
 				}
-			);
-			console.info(`Fetched categories response: ${response.status}`);
 
-			const categories = await Promise.all(
-				response.data.map(async (item: any) => {
-					const images = await fetchImages(item.name);
-					return { categoryName: item.name, images };
-				})
-			);
+				const response = await axios.get(
+					`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}`,
+					{ headers }
+				);
 
-			setData(categories);
-		} catch (error) {
-			Alert.alert("Ошибка", "Ошибка при получении категорий");
-			console.error("Error fetching categories:", error);
-		} finally {
-			setLoading(false);
-			setUploading(false);
-			setDeleting(false);
-		}
-	}, []);
+				// Если данные не изменились
+				if (response.status === 304) {
+					console.log("Data not modified");
+
+					// Ждём и снова проверяем через заданный интервал
+					setTimeout(() => {
+						fetchCategories(); // Повторяем запрос для проверки обновлений
+					}, delayBetweenChecks);
+
+					setLoading(false);
+					return false; // Данные не изменились, возвращаем false
+				}
+
+				// Если данные изменились, обновляем ETag
+				setEtag(response.headers.etag);
+
+				// Получаем и обрабатываем новые данные
+				const categories = await Promise.all(
+					response.data.map(async (item: any) => {
+						const images = await fetchImages(item.name);
+						return { categoryName: item.name, images };
+					})
+				);
+
+				// Обновляем состояние с новыми категориями
+				setData(categories);
+				setLoading(false);
+				return true; // Данные изменились
+			} catch (error) {
+				console.error("Error fetching categories:", error);
+				Alert.alert("Ошибка", "Ошибка при получении категорий");
+				setLoading(false);
+				return false;
+			}
+		},
+		[etag]
+	);
 
 	const fetchImages = async (
 		categoryName: string
@@ -219,7 +248,6 @@ export default function HomeScreen() {
 		try {
 			for (const image of images) {
 				await uploadImage(image);
-				await delay(1000); // Добавляем задержку между запросами
 			}
 			Alert.alert("Успех", "Все изображения успешно загружены");
 		} catch (error) {
@@ -230,7 +258,7 @@ export default function HomeScreen() {
 			console.error("Error handling image upload:", error);
 		} finally {
 			setUploading(false);
-			await fetchCategories(); // Обновляем список категорий сразу после загрузки
+			await fetchCategories(true); // Обновляем список категорий сразу после загрузки
 		}
 	};
 
@@ -267,11 +295,7 @@ export default function HomeScreen() {
 			Alert.alert("Успех", `Категория ${newCategoryName} добавлена`);
 			setNewCategoryName("");
 
-			// Обновляем список категорий после добавления
-			setData((prev) => [
-				{ categoryName: newCategoryName, images: [] },
-				...prev,
-			]);
+			await fetchCategories();
 		} catch (error) {
 			Alert.alert("Ошибка", "Ошибка при добавлении категории");
 			console.error("Error adding category:", error);
@@ -315,20 +339,8 @@ export default function HomeScreen() {
 								}
 							);
 
-							const updatedData = data.map((category) => {
-								if (category.categoryName === categoryName) {
-									return {
-										...category,
-										images: category.images.filter(
-											(image) =>
-												image.imageName !== imageName
-										),
-									};
-								}
-								return category;
-							});
-
-							setData(updatedData);
+							// Принудительно обновляем категории, игнорируя кэш
+							await fetchCategories(true);
 
 							Alert.alert(
 								"Успех",
@@ -494,12 +506,10 @@ export default function HomeScreen() {
 		);
 	};
 
-	const onRefresh = useCallback(async () => {
+	const onRefresh = useCallback(() => {
 		setRefreshing(true);
-		await fetchCategories();
-		setRefreshing(false);
+		fetchCategories(true).finally(() => setRefreshing(false));
 	}, [fetchCategories]);
-
 	return (
 		<View style={{ flex: 1, gap: 8, padding: 20, marginVertical: 40 }}>
 			<View style={{ flex: 1 }}>
