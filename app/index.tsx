@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
 	Image,
 	Text,
@@ -13,6 +13,8 @@ import {
 	RefreshControl,
 	StyleSheet,
 	Dimensions,
+	KeyboardAvoidingView,
+	Platform,
 } from "react-native";
 import axios from "axios";
 import * as ImagePicker from "expo-image-picker";
@@ -44,6 +46,11 @@ export default function HomeScreen() {
 	const [showSelectCategoryModal, setShowSelectCategoryModal] =
 		useState(false);
 	const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+
+	const [showRenameCategoryModal, setShowRenameCategoryModal] =
+		useState(false);
+	const [categoryToRename, setCategoryToRename] = useState("");
+	const [newName, setNewName] = useState("");
 
 	const baseUrl = "http://ivanorlovksy.ru/photo_api.php";
 	const token = "your_fixed_token_here";
@@ -159,8 +166,6 @@ export default function HomeScreen() {
 			return;
 		}
 
-		console.log(newCategoryName);
-
 		setLoading(true);
 		try {
 			const response = await axios.post(
@@ -181,7 +186,7 @@ export default function HomeScreen() {
 				throw new Error(response.data.error || "Неизвестная ошибка");
 			}
 		} catch (error) {
-			Alert.alert("Ошибка", "Ошибка при добавлении категории");
+			Alert.alert("Ошибка", "Категория с таким именем уже есть");
 			console.error("Error adding category:", error);
 		} finally {
 			setLoading(false);
@@ -286,6 +291,44 @@ export default function HomeScreen() {
 			]
 		);
 	};
+
+	const renameCategory = async () => {
+		if (!newName) {
+			Alert.alert(
+				"Ошибка",
+				"Новое название категории не может быть пустым"
+			);
+			return;
+		}
+
+		setLoading(true);
+		try {
+			const response = await axios.get(
+				`${baseUrl}?action=renameCategory&oldName=${categoryToRename}&newName=${newName}`,
+				{
+					headers: {
+						Authorization: token,
+					},
+				}
+			);
+
+			if (response.data.success) {
+				Alert.alert("Успех", `Категория переименована в ${newName}`);
+				setNewName("");
+				setCategoryToRename("");
+				await fetchCategories();
+			} else {
+				throw new Error(response.data.error || "Неизвестная ошибка");
+			}
+		} catch (error) {
+			Alert.alert("Ошибка", "Категория с таким именем уже есть");
+			console.error("Error renaming category:", error);
+		} finally {
+			setLoading(false);
+			setShowRenameCategoryModal(false);
+		}
+	};
+
 	const onRefresh = useCallback(() => {
 		setRefreshing(true);
 		fetchCategories().finally(() => setRefreshing(false));
@@ -295,6 +338,14 @@ export default function HomeScreen() {
 		return (
 			<View key={category.tab} style={styles.categoryContainer}>
 				<Text style={styles.categoryTitle}>{category.tab}</Text>
+				<Button
+					title="Переименовать"
+					onPress={() => {
+						setNewName("");
+						setCategoryToRename(category.tab);
+						setShowRenameCategoryModal(true);
+					}}
+				/>
 				<Button
 					title="Удалить категорию"
 					color="red"
@@ -336,32 +387,6 @@ export default function HomeScreen() {
 		);
 	};
 
-	const FullScreenImageModal = () => (
-		<Modal
-			visible={!!fullScreenImage}
-			transparent={true}
-			onRequestClose={() => setFullScreenImage(null)}
-		>
-			<View style={styles.fullScreenContainer}>
-				<TouchableOpacity
-					style={styles.fullScreenCloseButton}
-					onPress={() => setFullScreenImage(null)}
-				>
-					<Text style={styles.fullScreenCloseButtonText}>
-						Закрыть
-					</Text>
-				</TouchableOpacity>
-				{fullScreenImage && (
-					<Image
-						source={{ uri: fullScreenImage }}
-						style={styles.fullScreenImage}
-						resizeMode="contain"
-					/>
-				)}
-			</View>
-		</Modal>
-	);
-
 	return (
 		<View style={styles.container}>
 			<Text style={styles.title}>Галерея категорий</Text>
@@ -399,12 +424,39 @@ export default function HomeScreen() {
 			/>
 
 			<Modal
+				visible={!!fullScreenImage}
+				transparent={true}
+				onRequestClose={() => setFullScreenImage(null)}
+			>
+				<View style={styles.fullScreenContainer}>
+					<TouchableOpacity
+						style={styles.fullScreenCloseButton}
+						onPress={() => setFullScreenImage(null)}
+					>
+						<Text style={styles.fullScreenCloseButtonText}>
+							Закрыть
+						</Text>
+					</TouchableOpacity>
+					{fullScreenImage && (
+						<Image
+							source={{ uri: fullScreenImage }}
+							style={styles.fullScreenImage}
+							resizeMode="contain"
+						/>
+					)}
+				</View>
+			</Modal>
+
+			<Modal
 				visible={showAddCategoryModal}
 				animationType="slide"
 				onRequestClose={() => setShowAddCategoryModal(false)}
 				transparent
 			>
-				<View style={styles.modalContainer}>
+				<KeyboardAvoidingView
+					behavior={Platform.OS === "ios" ? "padding" : "height"}
+					style={styles.modalContainer}
+				>
 					<View style={styles.modalContent}>
 						<Text>Введите название для новой категории:</Text>
 						<TextInput
@@ -413,6 +465,7 @@ export default function HomeScreen() {
 								setNewCategoryName(text.trim())
 							}
 							style={styles.input}
+							autoFocus={true}
 						/>
 						<TouchableOpacity
 							style={styles.button}
@@ -427,7 +480,7 @@ export default function HomeScreen() {
 							<Text style={styles.buttonText}>Закрыть</Text>
 						</TouchableOpacity>
 					</View>
-				</View>
+				</KeyboardAvoidingView>
 			</Modal>
 
 			<Modal
@@ -466,7 +519,40 @@ export default function HomeScreen() {
 				</View>
 			</Modal>
 
-			<FullScreenImageModal />
+			<Modal
+				visible={showRenameCategoryModal}
+				transparent
+				animationType="slide"
+				onRequestClose={() => setShowRenameCategoryModal(false)}
+			>
+				<KeyboardAvoidingView
+					behavior={Platform.OS === "ios" ? "padding" : "height"}
+					style={styles.modalContainer}
+				>
+					<View style={styles.modalContent}>
+						<Text>Введите новое название для категории:</Text>
+						<TextInput
+							value={newName}
+							onChangeText={(text) => setNewName(text.trim())}
+							style={styles.input}
+							placeholder={categoryToRename}
+							autoFocus={true}
+						/>
+						<TouchableOpacity
+							style={styles.button}
+							onPress={renameCategory}
+						>
+							<Text style={styles.buttonText}>Переименовать</Text>
+						</TouchableOpacity>
+						<TouchableOpacity
+							style={styles.button}
+							onPress={() => setShowRenameCategoryModal(false)}
+						>
+							<Text style={styles.buttonText}>Отмена</Text>
+						</TouchableOpacity>
+					</View>
+				</KeyboardAvoidingView>
+			</Modal>
 		</View>
 	);
 }

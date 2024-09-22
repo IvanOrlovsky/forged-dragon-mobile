@@ -4,11 +4,11 @@
 		"slug": "forged-dragon-mobile",
 		"version": "1.0.0",
 		"orientation": "portrait",
-		"icon": "./assets/images/MOBILE_LOGO.png",
+		"icon": "./assets/images/MOBILE_LOGO.svg",
 		"scheme": "myapp",
 		"userInterfaceStyle": "automatic",
 		"splash": {
-			"image": "./assets/images/MOBILE_LOGO.png",
+			"image": "./assets/images/MOBILE_LOGO.svg",
 			"resizeMode": "contain",
 			"backgroundColor": "#ffffff"
 		},
@@ -17,7 +17,7 @@
 		},
 		"android": {
 			"adaptiveIcon": {
-				"foregroundImage": "./assets/images/MOBILE_LOGO.png",
+				"foregroundImage": "./assets/images/MOBILE_LOGO.svg",
 				"backgroundColor": "#ffffff"
 			},
 			"package": "com.orlovskyiwan.forgeddragonmobile"
@@ -25,7 +25,7 @@
 		"web": {
 			"bundler": "metro",
 			"output": "static",
-			"favicon": "./assets/images/MOBILE_LOGO.png"
+			"favicon": "./assets/images/MOBILE_LOGO.svg"
 		},
 		"plugins": ["expo-router"],
 		"experiments": {
