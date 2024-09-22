@@ -52,7 +52,7 @@ export default function HomeScreen() {
 	const [categoryToRename, setCategoryToRename] = useState("");
 	const [newName, setNewName] = useState("");
 
-	const baseUrl = "http://ivanorlovksy.ru/photo_api.php";
+	const baseUrl = "https://ivanorlovksy.ru/photo_api.php";
 	const token = "your_fixed_token_here";
 
 	const fetchCategories = useCallback(async () => {
