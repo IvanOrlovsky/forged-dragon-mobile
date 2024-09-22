@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
 	Image,
 	Text,
-	ScrollView,
 	View,
 	Button,
 	TextInput,
@@ -12,153 +11,69 @@ import {
 	FlatList,
 	TouchableOpacity,
 	RefreshControl,
+	StyleSheet,
+	Dimensions,
 } from "react-native";
 import axios from "axios";
-import { Buffer } from "buffer";
 import * as ImagePicker from "expo-image-picker";
-import { ImagePickerAsset } from "expo-image-picker";
 
+// Определение типов данных в соответствии с API
 interface ImageInterface {
-	imageName: string;
-	imageUrl: string;
-	sha: string;
+	original: string;
+	thumbnail: string;
 }
 
 interface CategoryImage {
-	categoryName: string;
+	tab: string;
 	images: ImageInterface[];
+}
+
+interface ApiResponse {
+	tabs: string[];
+	imagesByTab: CategoryImage[];
 }
 
 export default function HomeScreen() {
 	const [data, setData] = useState<CategoryImage[]>([]);
 	const [newCategoryName, setNewCategoryName] = useState("");
 	const [loading, setLoading] = useState(false);
-	const [deleting, setDeleting] = useState(false);
 	const [uploading, setUploading] = useState(false);
 	const [refreshing, setRefreshing] = useState(false);
 
 	const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
-	const [etag, setEtag] = useState<string | null>(null);
 	const [showSelectCategoryModal, setShowSelectCategoryModal] =
 		useState(false);
+	const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
 
-	useEffect(() => {
-		fetchCategories(true);
-	}, []);
+	const baseUrl = "http://ivanorlovksy.ru/photo_api.php";
+	const token = "your_fixed_token_here";
 
-	const fetchCategories = useCallback(
-		async (forceRefresh = false) => {
-			setLoading(true);
-			const username = "IvanOrlovsky";
-			const reponame = "forged-dragon";
-			const categoryPath = "public/category";
-			const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
-			const delayBetweenChecks = 2000;
-
-			console.log(etag);
-			try {
-				const headers: Record<string, string> = {
-					Authorization: `token ${token}`,
-					"Cache-Control": "no-cache", // Отключаем кеширование
-					Pragma: "no-cache",
-				};
-
-				// Если нет необходимости в принудительном обновлении и есть ETag, добавляем его в запрос
-				if (!forceRefresh && etag) {
-					headers["If-None-Match"] = etag;
-				}
-
-				const response = await axios.get(
-					`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}`,
-					{ headers }
-				);
-
-				// Если данные не изменились
-				if (response.status === 304) {
-					console.log("Data not modified");
-
-					// Ждём и снова проверяем через заданный интервал
-					setTimeout(() => {
-						fetchCategories(); // Повторяем запрос для проверки обновлений
-					}, delayBetweenChecks);
-
-					setLoading(false);
-					return false; // Данные не изменились, возвращаем false
-				}
-
-				// Если данные изменились, обновляем ETag
-				setEtag(response.headers.etag);
-
-				// Получаем и обрабатываем новые данные
-				const categories = await Promise.all(
-					response.data.map(async (item: any) => {
-						const images = await fetchImages(item.name);
-						return { categoryName: item.name, images };
-					})
-				);
-
-				// Обновляем состояние с новыми категориями
-				setData(categories);
-				setLoading(false);
-				return true; // Данные изменились
-			} catch (error) {
-				console.error("Error fetching categories:", error);
-				Alert.alert("Ошибка", "Ошибка при получении категорий");
-				setLoading(false);
-				return false;
-			}
-		},
-		[etag]
-	);
-
-	const fetchImages = async (
-		categoryName: string
-	): Promise<ImageInterface[]> => {
-		const username = "IvanOrlovsky";
-		const reponame = "forged-dragon";
-		const categoryPath = `public/category/${categoryName}`;
-		const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
-		console.info(`Fetching images for category: ${categoryName}...`);
-
+	const fetchCategories = useCallback(async () => {
+		setLoading(true);
 		try {
-			const response = await axios.get(
-				`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}`,
+			const response = await axios.get<ApiResponse>(
+				`${baseUrl}?action=getContentType`,
 				{
 					headers: {
-						Authorization: `token ${token}`,
+						Accept: "application/json",
+						"Content-Type": "application/json",
+						Authorization: token,
 					},
 				}
 			);
-			console.info(`Fetched images response: ${response.status}`);
 
-			return await Promise.all(
-				response.data.map(async (image: any) => {
-					const imageResponse = await axios.get(image.git_url, {
-						headers: {
-							Authorization: `token ${token}`,
-							Accept: "application/vnd.github.VERSION.raw",
-						},
-						responseType: "arraybuffer",
-					});
-					const base64Image = Buffer.from(
-						imageResponse.data,
-						"binary"
-					).toString("base64");
-					return {
-						imageName: image.name,
-						imageUrl: `data:image/webp;base64,${base64Image}`,
-						sha: image.sha,
-					};
-				})
-			);
+			setData(response.data.imagesByTab);
 		} catch (error) {
-			console.error(
-				`Error fetching images for category ${categoryName}:`,
-				error
-			);
-			return [];
+			console.error("Error fetching categories:", error);
+			Alert.alert("Ошибка", "Ошибка при получении категорий");
+		} finally {
+			setLoading(false);
 		}
-	};
+	}, []);
+
+	useEffect(() => {
+		fetchCategories();
+	}, [fetchCategories]);
 
 	const pickImageFromGallery = async (selectedCategory: string) => {
 		const { status } =
@@ -180,69 +95,45 @@ export default function HomeScreen() {
 		}
 	};
 
-	const delay = (ms: number) =>
-		new Promise((resolve) => setTimeout(resolve, ms));
-
 	const handleUploadImages = async (
-		images: ImagePickerAsset[],
+		images: ImagePicker.ImagePickerAsset[],
 		selectedCategory: string
 	) => {
 		setUploading(true);
-
-		const username = "IvanOrlovsky";
-		const reponame = "forged-dragon";
-		const categoryPath = `public/category/${selectedCategory}`;
-		const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
 		let uploadedCount = 0;
 
-		const uploadImage = async (image: ImagePickerAsset) => {
-			const response = await fetch(image.uri);
-			const blob = await response.blob();
-			const reader = new FileReader();
+		const uploadImage = async (image: ImagePicker.ImagePickerAsset) => {
+			const formData = new FormData();
+			formData.append("category", selectedCategory);
+			formData.append("photo", {
+				uri: image.uri,
+				type: image.mimeType || "image/jpeg", // Используйте тип, если он доступен
+				name: image.uri.split("/").pop(), // Берем имя из URI
+			} as any);
 
-			return new Promise<void>(async (resolve, reject) => {
-				reader.onloadend = async () => {
-					const base64data = reader.result?.toString().split(",")[1];
-					const fileName = `${Date.now()}_${Math.random()
-						.toString(36)
-						.substring(7)}.jpg`;
-
-					try {
-						const uploadResponse = await axios.put(
-							`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/${fileName}`,
-							{
-								message: `Добавление нового изображения в категорию ${selectedCategory}`,
-								content: base64data,
-							},
-							{
-								headers: {
-									Authorization: `token ${token}`,
-								},
-							}
-						);
-						console.info(
-							`Image upload response for ${fileName}: ${uploadResponse.status}`
-						);
-
-						if (uploadResponse.status === 201) {
-							uploadedCount += 1;
-							resolve();
-						} else {
-							throw new Error(
-								`Unexpected response status for ${fileName}: ${uploadResponse.status}`
-							);
-						}
-					} catch (uploadError) {
-						console.error(
-							`Error uploading image ${fileName}:`,
-							uploadError
-						);
-						reject(uploadError);
+			try {
+				const uploadResponse = await axios.post(
+					`${baseUrl}?action=uploadPhoto`,
+					formData,
+					{
+						headers: {
+							"Content-Type": "multipart/form-data",
+							Authorization: token,
+						},
 					}
-				};
-				reader.onerror = (error) => reject(error);
-				reader.readAsDataURL(blob);
-			});
+				);
+
+				if (uploadResponse.data.success) {
+					uploadedCount += 1;
+				} else {
+					throw new Error(
+						`Error uploading image: ${uploadResponse.data.message}`
+					);
+				}
+			} catch (uploadError) {
+				console.error(`Error uploading image:`, uploadError);
+				throw uploadError;
+			}
 		};
 
 		try {
@@ -258,7 +149,7 @@ export default function HomeScreen() {
 			console.error("Error handling image upload:", error);
 		} finally {
 			setUploading(false);
-			await fetchCategories(true); // Обновляем список категорий сразу после загрузки
+			await fetchCategories();
 		}
 	};
 
@@ -268,47 +159,37 @@ export default function HomeScreen() {
 			return;
 		}
 
+		console.log(newCategoryName);
+
 		setLoading(true);
-		const username = "IvanOrlovsky";
-		const reponame = "forged-dragon";
-		const categoryPath = `public/category/${newCategoryName}`;
-		const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
-		console.info(`Adding new category: ${newCategoryName}...`);
-
-		// Закрыть модальное окно после ввода категории
-		setShowAddCategoryModal(false);
-
 		try {
-			await axios.put(
-				`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/.gitkeep`,
-				{
-					message: `Add new category ${newCategoryName}`,
-					content: Buffer.from("").toString("base64"),
-				},
+			const response = await axios.post(
+				`${baseUrl}?action=addCategory`,
+				{ categoryName: newCategoryName },
 				{
 					headers: {
-						Authorization: `token ${token}`,
+						Authorization: token,
 					},
 				}
 			);
 
-			Alert.alert("Успех", `Категория ${newCategoryName} добавлена`);
-			setNewCategoryName("");
-
-			await fetchCategories();
+			if (response.data.success) {
+				Alert.alert("Успех", `Категория ${newCategoryName} добавлена`);
+				setNewCategoryName("");
+				await fetchCategories();
+			} else {
+				throw new Error(response.data.error || "Неизвестная ошибка");
+			}
 		} catch (error) {
 			Alert.alert("Ошибка", "Ошибка при добавлении категории");
 			console.error("Error adding category:", error);
 		} finally {
 			setLoading(false);
+			setShowAddCategoryModal(false);
 		}
 	};
 
-	const deleteImage = async (
-		categoryName: string,
-		imageName: string,
-		sha: string
-	) => {
+	const deleteImage = async (categoryName: string, imageName: string) => {
 		Alert.alert(
 			"Подтверждение",
 			`Вы уверены, что хотите удалить изображение ${imageName}?`,
@@ -318,34 +199,27 @@ export default function HomeScreen() {
 					text: "Удалить",
 					onPress: async () => {
 						setLoading(true);
-						const username = "IvanOrlovsky";
-						const reponame = "forged-dragon";
-						const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
-						console.info(
-							`Deleting image: ${imageName} from category: ${categoryName}...`
-						);
-
 						try {
-							await axios.delete(
-								`https://api.github.com/repos/${username}/${reponame}/contents/public/category/${categoryName}/${imageName}`,
+							const response = await axios.get(
+								`${baseUrl}?action=deletePhoto&category=${categoryName}&filename=${imageName}`,
 								{
-									data: {
-										message: `Delete image ${imageName}`,
-										sha,
-									},
 									headers: {
-										Authorization: `token ${token}`,
+										Authorization: token,
 									},
 								}
 							);
 
-							// Принудительно обновляем категории, игнорируя кэш
-							await fetchCategories(true);
-
-							Alert.alert(
-								"Успех",
-								`Изображение ${imageName} удалено`
-							);
+							if (response.data.success) {
+								await fetchCategories();
+								Alert.alert(
+									"Успех",
+									`Изображение ${imageName} удалено`
+								);
+							} else {
+								throw new Error(
+									response.data.error || "Неизвестная ошибка"
+								);
+							}
 						} catch (error) {
 							Alert.alert(
 								"Ошибка",
@@ -373,64 +247,28 @@ export default function HomeScreen() {
 				{
 					text: "Удалить",
 					onPress: async () => {
-						setDeleting(true);
-						const username = "IvanOrlovsky";
-						const reponame = "forged-dragon";
-						const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
-						console.info(`Deleting category: ${categoryName}...`);
-
+						setLoading(true);
 						try {
-							const categoryPath = `public/category/${categoryName}`;
 							const response = await axios.get(
-								`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}`,
+								`${baseUrl}?action=deleteCategory&category=${categoryName}`,
 								{
 									headers: {
-										Authorization: `token ${token}`,
+										Authorization: token,
 									},
 								}
 							);
 
-							// Удаляем все изображения категории
-							for (let image of response.data) {
-								if (image.name !== ".gitkeep") {
-									await axios.delete(
-										`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/${image.name}`,
-										{
-											data: {
-												message: `Delete image ${image.name} in category ${categoryName}`,
-												sha: image.sha,
-											},
-											headers: {
-												Authorization: `token ${token}`,
-											},
-										}
-									);
-								}
-							}
-
-							// Удаляем саму категорию
-							const gitkeepItem = response.data.find(
-								(item: any) => item.name === ".gitkeep"
-							);
-							if (gitkeepItem) {
-								await axios.delete(
-									`https://api.github.com/repos/${username}/${reponame}/contents/${categoryPath}/.gitkeep`,
-									{
-										data: {
-											message: `Delete category ${categoryName}`,
-											sha: gitkeepItem.sha,
-										},
-										headers: {
-											Authorization: `token ${token}`,
-										},
-									}
+							if (response.data.success) {
+								Alert.alert(
+									"Успех",
+									`Категория ${categoryName} и все её изображения удалены`
+								);
+								await fetchCategories();
+							} else {
+								throw new Error(
+									response.data.error || "Неизвестная ошибка"
 								);
 							}
-
-							Alert.alert(
-								"Успех",
-								`Категория ${categoryName} и все её изображения удалены`
-							);
 						} catch (error) {
 							Alert.alert(
 								"Ошибка",
@@ -441,126 +279,114 @@ export default function HomeScreen() {
 								error
 							);
 						} finally {
-							setDeleting(false);
-							// Обновляем список категорий после удаления
-							await fetchCategories();
+							setLoading(false);
 						}
 					},
 				},
 			]
 		);
 	};
+	const onRefresh = useCallback(() => {
+		setRefreshing(true);
+		fetchCategories().finally(() => setRefreshing(false));
+	}, [fetchCategories]);
 
 	const renderCategoryImages = (category: CategoryImage) => {
 		return (
-			<View
-				key={category.categoryName}
-				style={{
-					marginBottom: 20,
-					padding: 16,
-					backgroundColor: "#C0C2C9",
-					borderRadius: 16,
-					flex: 1,
-					flexDirection: "column",
-					gap: 10,
-				}}
-			>
-				<Text style={{ fontSize: 18, fontWeight: "bold" }}>
-					{category.categoryName}
-				</Text>
+			<View key={category.tab} style={styles.categoryContainer}>
+				<Text style={styles.categoryTitle}>{category.tab}</Text>
 				<Button
 					title="Удалить категорию"
 					color="red"
-					onPress={() => deleteCategory(category.categoryName)}
+					onPress={() => deleteCategory(category.tab)}
 				/>
-				<ScrollView horizontal>
-					{category.images.map((image) => {
-						if (image.imageName !== ".gitkeep") {
-							return (
-								<View
-									key={image.imageName}
-									style={{ marginRight: 10 }}
-								>
-									<Image
-										source={{ uri: image.imageUrl }}
-										style={{ width: 100, height: 100 }}
-										resizeMode="cover"
-									/>
-									<Button
-										title="Удалить"
-										color="red"
-										onPress={() =>
-											deleteImage(
-												category.categoryName,
-												image.imageName,
-												image.sha
-											)
-										}
-									/>
-								</View>
-							);
-						}
-					})}
-				</ScrollView>
+				<FlatList
+					horizontal
+					data={category.images}
+					keyExtractor={(item) => item.thumbnail}
+					renderItem={({ item }) => (
+						<View style={styles.imageContainer}>
+							<TouchableOpacity
+								onPress={() =>
+									setFullScreenImage(item.original)
+								}
+							>
+								<Image
+									source={{
+										uri: item.thumbnail,
+									}}
+									style={styles.image}
+									resizeMode="cover"
+								/>
+							</TouchableOpacity>
+							<Button
+								title="Удалить"
+								color="red"
+								onPress={() =>
+									deleteImage(
+										category.tab,
+										item.original.split("/").pop() || ""
+									)
+								}
+							/>
+						</View>
+					)}
+				/>
 			</View>
 		);
 	};
 
-	const onRefresh = useCallback(() => {
-		setRefreshing(true);
-		fetchCategories(true).finally(() => setRefreshing(false));
-	}, [fetchCategories]);
-	return (
-		<View style={{ flex: 1, gap: 8, padding: 20, marginVertical: 40 }}>
-			<View style={{ flex: 1 }}>
-				<Text
-					style={{
-						fontSize: 24,
-						fontWeight: "bold",
-						marginBottom: 10,
-					}}
+	const FullScreenImageModal = () => (
+		<Modal
+			visible={!!fullScreenImage}
+			transparent={true}
+			onRequestClose={() => setFullScreenImage(null)}
+		>
+			<View style={styles.fullScreenContainer}>
+				<TouchableOpacity
+					style={styles.fullScreenCloseButton}
+					onPress={() => setFullScreenImage(null)}
 				>
-					Галерея категорий
-				</Text>
-				{loading || deleting || uploading ? (
-					<View
-						style={{
-							flex: 1,
-							justifyContent: "center",
-							alignItems: "center",
-						}}
-					>
-						<ActivityIndicator size="large" color="#0000ff" />
-						{loading && (
-							<View>
-								<Text>Загрузка данных сайта...</Text>
-							</View>
-						)}
-						{uploading && (
-							<View>
-								<Text>Загрузка изображений...</Text>
-							</View>
-						)}
-						{deleting && (
-							<View>
-								<Text>Удаление категории...</Text>
-							</View>
-						)}
-					</View>
-				) : (
-					<FlatList
-						data={data}
-						renderItem={({ item }) => renderCategoryImages(item)}
-						keyExtractor={(item) => item.categoryName}
-						refreshControl={
-							<RefreshControl
-								refreshing={refreshing}
-								onRefresh={onRefresh}
-							/>
-						}
+					<Text style={styles.fullScreenCloseButtonText}>
+						Закрыть
+					</Text>
+				</TouchableOpacity>
+				{fullScreenImage && (
+					<Image
+						source={{ uri: fullScreenImage }}
+						style={styles.fullScreenImage}
+						resizeMode="contain"
 					/>
 				)}
 			</View>
+		</Modal>
+	);
+
+	return (
+		<View style={styles.container}>
+			<Text style={styles.title}>Галерея категорий</Text>
+			{loading || uploading ? (
+				<View style={styles.loadingContainer}>
+					<ActivityIndicator size="large" color="#0000ff" />
+					<Text>
+						{loading
+							? "Загрузка данных сайта..."
+							: "Загрузка изображений..."}
+					</Text>
+				</View>
+			) : (
+				<FlatList
+					data={data}
+					renderItem={({ item }) => renderCategoryImages(item)}
+					keyExtractor={(item) => item.tab}
+					refreshControl={
+						<RefreshControl
+							refreshing={refreshing}
+							onRefresh={onRefresh}
+						/>
+					}
+				/>
+			)}
 
 			<Button
 				title="Добавить изображения"
@@ -572,142 +398,169 @@ export default function HomeScreen() {
 				onPress={() => setShowAddCategoryModal(true)}
 			/>
 
-			{/* Модальное окно добавления категории */}
 			<Modal
 				visible={showAddCategoryModal}
 				animationType="slide"
 				onRequestClose={() => setShowAddCategoryModal(false)}
 				transparent
 			>
-				<View
-					style={{
-						flex: 1,
-						justifyContent: "center",
-						alignItems: "center",
-						backgroundColor: "rgba(0,0,0,0.5)",
-					}}
-				>
-					<View
-						style={{
-							width: 300,
-							backgroundColor: "white",
-							borderRadius: 10,
-							padding: 20,
-						}}
-					>
+				<View style={styles.modalContainer}>
+					<View style={styles.modalContent}>
 						<Text>Введите название для новой категории:</Text>
 						<TextInput
 							value={newCategoryName}
 							onChangeText={(text) =>
 								setNewCategoryName(text.trim())
 							}
-							style={{
-								borderWidth: 1,
-								marginVertical: 10,
-								padding: 5,
-								alignSelf: "stretch",
-							}}
+							style={styles.input}
 						/>
 						<TouchableOpacity
-							style={{
-								alignSelf: "stretch",
-								borderWidth: 1,
-								padding: 10,
-								backgroundColor: "#4169E1",
-								marginBottom: 8,
-							}}
+							style={styles.button}
 							onPress={addCategory}
 						>
-							<Text
-								style={{ color: "white", textAlign: "center" }}
-							>
-								Создать
-							</Text>
+							<Text style={styles.buttonText}>Создать</Text>
 						</TouchableOpacity>
 						<TouchableOpacity
-							style={{
-								borderWidth: 1,
-								padding: 10,
-								backgroundColor: "#4169E1",
-								alignSelf: "stretch",
-							}}
+							style={styles.button}
 							onPress={() => setShowAddCategoryModal(false)}
 						>
-							<Text
-								style={{ color: "white", textAlign: "center" }}
-							>
-								Закрыть
-							</Text>
+							<Text style={styles.buttonText}>Закрыть</Text>
 						</TouchableOpacity>
 					</View>
 				</View>
 			</Modal>
 
-			{/* Модальное окно для выбора категории куда загрузить изображение */}
 			<Modal
 				visible={showSelectCategoryModal}
 				transparent
 				animationType="slide"
 			>
-				<View
-					style={{
-						flex: 1,
-						justifyContent: "center",
-						alignItems: "center",
-						backgroundColor: "rgba(0,0,0,0.5)",
-					}}
-				>
-					<View
-						style={{
-							width: 300,
-							backgroundColor: "white",
-							borderRadius: 10,
-							padding: 20,
-						}}
-					>
+				<View style={styles.modalContainer}>
+					<View style={styles.modalContent}>
 						<Text>
 							Выберите в какую категорию загрузить изображение:
 						</Text>
 						<FlatList
-							style={{ marginVertical: 8 }}
-							data={data.map((category) => category.categoryName)}
-							keyExtractor={(item) => item}
+							data={data}
+							keyExtractor={(item) => item.tab}
 							renderItem={({ item }) => (
 								<TouchableOpacity
 									onPress={() => {
-										pickImageFromGallery(item);
+										pickImageFromGallery(item.tab);
 										setShowSelectCategoryModal(false);
 									}}
 								>
-									<Text
-										style={{
-											padding: 10,
-											fontWeight: "bold",
-										}}
-									>
-										{item}
+									<Text style={styles.categorySelectText}>
+										{item.tab}
 									</Text>
 								</TouchableOpacity>
 							)}
 						/>
-
 						<TouchableOpacity
-							style={{
-								borderWidth: 1,
-								padding: 10,
-								backgroundColor: "#4169E1",
-							}}
+							style={styles.button}
 							onPress={() => setShowSelectCategoryModal(false)}
 						>
-							<Text
-								style={{ color: "white", textAlign: "center" }}
-							>
-								Отмена
-							</Text>
+							<Text style={styles.buttonText}>Отмена</Text>
 						</TouchableOpacity>
 					</View>
 				</View>
 			</Modal>
+
+			<FullScreenImageModal />
 		</View>
 	);
 }
+
+const styles = StyleSheet.create({
+	container: {
+		flex: 1,
+		gap: 8,
+		padding: 20,
+		marginVertical: 40,
+	},
+	title: {
+		fontSize: 24,
+		fontWeight: "bold",
+		marginBottom: 10,
+	},
+	loadingContainer: {
+		flex: 1,
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	categoryContainer: {
+		marginBottom: 20,
+		padding: 16,
+		backgroundColor: "#C0C2C9",
+		borderRadius: 16,
+	},
+	categoryTitle: {
+		fontSize: 20,
+		fontWeight: "bold",
+		marginBottom: 10,
+	},
+	imageContainer: {
+		marginTop: 15,
+		flex: 1,
+		gap: 4,
+		marginRight: 10,
+	},
+	image: {
+		width: 100,
+		height: 100,
+	},
+	modalContainer: {
+		flex: 1,
+		justifyContent: "center",
+		alignItems: "center",
+		backgroundColor: "rgba(0,0,0,0.5)",
+	},
+	modalContent: {
+		width: 300,
+		backgroundColor: "white",
+		borderRadius: 10,
+		padding: 20,
+	},
+	input: {
+		borderWidth: 1,
+		marginVertical: 10,
+		padding: 5,
+	},
+	button: {
+		borderWidth: 1,
+		padding: 10,
+		backgroundColor: "#4169E1",
+		marginTop: 8,
+	},
+	buttonText: {
+		color: "white",
+		textAlign: "center",
+	},
+	categorySelectText: {
+		padding: 10,
+		fontWeight: "bold",
+	},
+	fullScreenContainer: {
+		flex: 1,
+		backgroundColor: "black",
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	fullScreenImage: {
+		width: Dimensions.get("window").width,
+		height: Dimensions.get("window").height,
+	},
+	fullScreenCloseButton: {
+		position: "absolute",
+		top: 40,
+		right: 20,
+		zIndex: 1,
+		padding: 10,
+		backgroundColor: "rgba(0, 0, 0, 0.5)",
+		borderRadius: 5,
+	},
+	fullScreenCloseButtonText: {
+		color: "white",
+		fontSize: 16,
+	},
+});
