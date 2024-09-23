@@ -56,7 +56,7 @@ export default function HomeScreen() {
 	const [currentCategory, setCurrentCategory] = useState("");
 
 	const baseUrl = "https://ivanorlovksy.ru/photo_api.php";
-	const token = "your_fixed_token_here";
+	const token = process.env.EXPO_PUBLIC_API_TOKEN;
 
 	const fetchCategories = useCallback(async () => {
 		setShowAddCategoryModal(false);
