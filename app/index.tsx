@@ -60,14 +60,14 @@ export default function HomeScreen() {
 
 	const owner = "IvanOrlovsky";
 	const repo = "forged-dragon";
-	const workflowId = "ci-cd.yml"; // или ID workflow
+	const workflowId = "ci-cd.yml";
 	const git_token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
 
 	const triggerWorkflow = async () => {
 		try {
 			const response = await axios.post(
 				`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflowId}/dispatches`,
-				{ ref: "main" }, // укажите ветку, которую хотите запустить
+				{ ref: "main" },
 				{
 					headers: {
 						Authorization: `token ${git_token}`,
@@ -144,8 +144,8 @@ export default function HomeScreen() {
 			formData.append("category", selectedCategory);
 			formData.append("photo", {
 				uri: image.uri,
-				type: image.mimeType || "image/jpeg", // Используйте тип, если он доступен
-				name: image.uri.split("/").pop(), // Берем имя из URI
+				type: image.mimeType || "image/jpeg",
+				name: image.uri.split("/").pop(),
 			} as any);
 
 			try {
@@ -700,7 +700,7 @@ const styles = StyleSheet.create({
 	},
 	fullScreenContainer: {
 		flex: 1,
-		backgroundColor: "rgba(0,0,0,0.9)", // Semi-transparent black
+		backgroundColor: "rgba(0,0,0,0.9)",
 		justifyContent: "center",
 		alignItems: "center",
 	},
