@@ -8,7 +8,7 @@
 		"scheme": "myapp",
 		"userInterfaceStyle": "automatic",
 		"splash": {
-			"image": "./assets/images/MOBILE_LOGO.png",
+			"image": "./assets/images/SPLASH_LOGO.png",
 			"resizeMode": "contain",
 			"backgroundColor": "#ffffff"
 		},
@@ -17,7 +17,7 @@
 		},
 		"android": {
 			"adaptiveIcon": {
-				"foregroundImage": "./assets/images/MOBILE_LOGO.png",
+				"foregroundImage": "./assets/images/ADAPTIVE_LOGO.png",
 				"backgroundColor": "#ffffff"
 			},
 			"package": "com.orlovskyiwan.forgeddragonmobile"
