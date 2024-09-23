@@ -17,8 +17,7 @@
 		},
 		"android": {
 			"adaptiveIcon": {
-				"foregroundImage": "./assets/images/ADAPTIVE_LOGO.png",
-				"backgroundColor": "#ffffff"
+				"foregroundImage": "./assets/images/MOBILE_LOGO.png"
 			},
 			"package": "com.orlovskyiwan.forgeddragonmobile"
 		},
