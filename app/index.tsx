@@ -58,6 +58,28 @@ export default function HomeScreen() {
 	const baseUrl = "https://ivanorlovksy.ru/photo_api.php";
 	const token = process.env.EXPO_PUBLIC_API_TOKEN;
 
+	const owner = "IvanOrlovsky";
+	const repo = "forged-dragon";
+	const workflowId = "ci-cd.yml"; // или ID workflow
+	const git_token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
+
+	const triggerWorkflow = async () => {
+		try {
+			const response = await axios.post(
+				`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflowId}/dispatches`,
+				{ ref: "main" }, // укажите ветку, которую хотите запустить
+				{
+					headers: {
+						Authorization: `token ${git_token}`,
+						"Content-Type": "application/json",
+					},
+				}
+			);
+		} catch (error) {
+			console.error("Ошибка при перезапуске workflow:", error);
+		}
+	};
+
 	const fetchCategories = useCallback(async () => {
 		setShowAddCategoryModal(false);
 		setShowSelectCategoryModal(false);
@@ -82,6 +104,7 @@ export default function HomeScreen() {
 			Alert.alert("Ошибка", "Ошибка при получении категорий");
 		} finally {
 			setLoading(false);
+			triggerWorkflow();
 		}
 	}, []);
 
