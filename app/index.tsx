@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import axios from "axios";
 import * as ImagePicker from "expo-image-picker";
+import PagerView from "react-native-pager-view";
 
 // Определение типов данных в соответствии с API
 interface ImageInterface {
@@ -51,6 +52,8 @@ export default function HomeScreen() {
 		useState(false);
 	const [categoryToRename, setCategoryToRename] = useState("");
 	const [newName, setNewName] = useState("");
+
+	const [currentCategory, setCurrentCategory] = useState("");
 
 	const baseUrl = "https://ivanorlovksy.ru/photo_api.php";
 	const token = "your_fixed_token_here";
@@ -358,9 +361,10 @@ export default function HomeScreen() {
 					renderItem={({ item }) => (
 						<View style={styles.imageContainer}>
 							<TouchableOpacity
-								onPress={() =>
-									setFullScreenImage(item.original)
-								}
+								onPress={() => {
+									setCurrentCategory(category.tab);
+									setFullScreenImage(item.original);
+								}}
 							>
 								<Image
 									source={{
@@ -428,23 +432,45 @@ export default function HomeScreen() {
 				transparent={true}
 				onRequestClose={() => setFullScreenImage(null)}
 			>
-				<View style={styles.fullScreenContainer}>
-					<TouchableOpacity
-						style={styles.fullScreenCloseButton}
-						onPress={() => setFullScreenImage(null)}
-					>
-						<Text style={styles.fullScreenCloseButtonText}>
-							Закрыть
-						</Text>
-					</TouchableOpacity>
-					{fullScreenImage && (
-						<Image
-							source={{ uri: fullScreenImage }}
-							style={styles.fullScreenImage}
-							resizeMode="contain"
-						/>
-					)}
-				</View>
+				<PagerView
+					style={{
+						flex: 1,
+						alignSelf: "stretch",
+						backgroundColor: "black",
+					}}
+					initialPage={
+						data
+							.find((data) => data.tab === currentCategory)
+							?.images.findIndex(
+								(image) => image.original === fullScreenImage
+							) || 0
+					}
+				>
+					{data
+						.find((data) => data.tab === currentCategory)
+						?.images.map((image, index) => (
+							<View
+								style={styles.fullScreenContainer}
+								key={index}
+							>
+								<TouchableOpacity
+									style={styles.fullScreenCloseButton}
+									onPress={() => setFullScreenImage(null)}
+								>
+									<Text
+										style={styles.fullScreenCloseButtonText}
+									>
+										Закрыть
+									</Text>
+								</TouchableOpacity>
+								<Image
+									source={{ uri: image.original }}
+									style={styles.fullScreenImage}
+									resizeMode="contain"
+								/>
+							</View>
+						))}
+				</PagerView>
 			</Modal>
 
 			<Modal
@@ -628,7 +654,7 @@ const styles = StyleSheet.create({
 	},
 	fullScreenContainer: {
 		flex: 1,
-		backgroundColor: "black",
+		backgroundColor: "rgba(0,0,0,0.9)", // Semi-transparent black
 		justifyContent: "center",
 		alignItems: "center",
 	},
