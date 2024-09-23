@@ -59,6 +59,10 @@ export default function HomeScreen() {
 	const token = "your_fixed_token_here";
 
 	const fetchCategories = useCallback(async () => {
+		setShowAddCategoryModal(false);
+		setShowSelectCategoryModal(false);
+		setShowRenameCategoryModal(false);
+		setFullScreenImage(null);
 		setLoading(true);
 		try {
 			const response = await axios.get<ApiResponse>(
@@ -342,7 +346,7 @@ export default function HomeScreen() {
 			<View key={category.tab} style={styles.categoryContainer}>
 				<Text style={styles.categoryTitle}>{category.tab}</Text>
 				<Button
-					title="Переименовать"
+					title="Переименовать категорию"
 					onPress={() => {
 						setNewName("");
 						setCategoryToRename(category.tab);
@@ -453,6 +457,27 @@ export default function HomeScreen() {
 								style={styles.fullScreenContainer}
 								key={index}
 							>
+								<Image
+									source={{ uri: image.original }}
+									style={styles.fullScreenImage}
+									resizeMode="contain"
+								/>
+								<TouchableOpacity
+									style={styles.fullScreenDeleteButton}
+									onPress={() =>
+										deleteImage(
+											currentCategory,
+											image.original.split("/").pop() ||
+												""
+										)
+									}
+								>
+									<Text
+										style={styles.fullScreenCloseButtonText}
+									>
+										Удалить фото
+									</Text>
+								</TouchableOpacity>
 								<TouchableOpacity
 									style={styles.fullScreenCloseButton}
 									onPress={() => setFullScreenImage(null)}
@@ -463,11 +488,6 @@ export default function HomeScreen() {
 										Закрыть
 									</Text>
 								</TouchableOpacity>
-								<Image
-									source={{ uri: image.original }}
-									style={styles.fullScreenImage}
-									resizeMode="contain"
-								/>
 							</View>
 						))}
 				</PagerView>
@@ -601,6 +621,9 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 	},
 	categoryContainer: {
+		flex: 1,
+		flexDirection: "column",
+		gap: 8,
 		marginBottom: 20,
 		padding: 16,
 		backgroundColor: "#C0C2C9",
@@ -664,11 +687,20 @@ const styles = StyleSheet.create({
 	},
 	fullScreenCloseButton: {
 		position: "absolute",
-		top: 40,
-		right: 20,
+		bottom: 40,
+		right: 30,
 		zIndex: 1,
 		padding: 10,
-		backgroundColor: "rgba(0, 0, 0, 0.5)",
+		backgroundColor: "gray",
+		borderRadius: 5,
+	},
+	fullScreenDeleteButton: {
+		position: "absolute",
+		bottom: 100,
+		right: 30,
+		zIndex: 1,
+		padding: 10,
+		backgroundColor: "red",
 		borderRadius: 5,
 	},
 	fullScreenCloseButtonText: {
