@@ -2,6 +2,7 @@
 	"expo": {
 		"name": "Кованый Дракон",
 		"slug": "forged-dragon-mobile",
+		"owner": "orlovskyiwan",
 		"version": "3.0.0",
 		"orientation": "portrait",
 		"icon": "./assets/images/MOBILE_LOGO.png",
