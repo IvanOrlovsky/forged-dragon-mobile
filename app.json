@@ -1,8 +1,8 @@
 {
 	"expo": {
-		"name": "forged-dragon-mobile",
+		"name": "Кованый Дракон",
 		"slug": "forged-dragon-mobile",
-		"version": "1.0.0",
+		"version": "3.0.0",
 		"orientation": "portrait",
 		"icon": "./assets/images/MOBILE_LOGO.png",
 		"scheme": "myapp",
