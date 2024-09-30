@@ -55,7 +55,7 @@ export default function HomeScreen() {
 
 	const [currentCategory, setCurrentCategory] = useState("");
 
-	const baseUrl = "https://ivanorlovksy.ru/photo_api.php";
+	const baseUrl = "https://forgeddragon.ru/photo_api.php";
 	const token = process.env.EXPO_PUBLIC_API_TOKEN;
 
 	const owner = "IvanOrlovsky";
